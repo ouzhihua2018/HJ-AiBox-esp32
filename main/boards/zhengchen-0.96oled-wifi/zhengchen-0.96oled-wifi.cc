@@ -27,8 +27,7 @@ LV_FONT_DECLARE(font_puhui_14_1);
 LV_FONT_DECLARE(font_awesome_14_1);
 
 
-// 定义XINGZHI_CUBE_0_96OLED_WIFI类，继承自WifiBoard
-class XINGZHI_CUBE_0_96OLED_WIFI : public WifiBoard {
+class ZHENGCHEN_0_96OLED_WIFI : public WifiBoard {
 private:
     // 定义I2C总线句柄
     i2c_master_bus_handle_t display_i2c_bus_;
@@ -267,7 +266,7 @@ private:
     }
 
 public:
-    XINGZHI_CUBE_0_96OLED_WIFI() :
+    ZHENGCHEN_0_96OLED_WIFI() :
         boot_button_(BOOT_BUTTON_GPIO),
         volume_up_button_(VOLUME_UP_BUTTON_GPIO),
         volume_down_button_(VOLUME_DOWN_BUTTON_GPIO) {
@@ -294,7 +293,7 @@ public:
         return display_;
     }
 
-    virtual bool GetBatteryLevel(int& level, bool& charging, bool& discharging,float& esp32temp) override {
+    virtual bool GetBatteryLevel(int& level, bool& charging, bool& discharging) override {
         static bool last_discharging = false;
         charging = power_manager_->IsCharging();
         discharging = power_manager_->IsDischarging();
@@ -303,6 +302,10 @@ public:
             last_discharging = discharging;
         }
         level = power_manager_->GetBatteryLevel();
+        return true;
+    }
+
+    virtual bool GetESP32Temp(float& esp32temp)  override {
         esp32temp = power_manager_->GetTemperature();
         return true;
     }
@@ -315,4 +318,4 @@ public:
     }
 };
 
-DECLARE_BOARD(XINGZHI_CUBE_0_96OLED_WIFI);
+DECLARE_BOARD(ZHENGCHEN_0_96OLED_WIFI);

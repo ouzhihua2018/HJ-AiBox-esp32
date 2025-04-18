@@ -163,13 +163,13 @@ choice BOARD_TYPE
     config BOARD_TYPE_MIXGO_NOVA
         bool "元控·青春"
     config BOARD_TYPE_ZHENGCHEN_0_96OLED_WIFI
-        bool "正宸0.96(WIFI)"
+        bool "征辰0.96(WIFI)"
     config BOARD_TYPE_ZHENGCHEN_0_96OLED_ML307
-        bool "正宸0.96(ML307)"
+        bool "征辰0.96(ML307)"
     config BOARD_TYPE_ZHENGCHEN_1_54TFT_WIFI
-        bool "正宸1.54(WIFI)"
+        bool "征辰1.54(WIFI)"
     config BOARD_TYPE_ZHENGCHEN_1_54TFT_ML307
-        bool "正宸1.54(ML307)"
+        bool "征辰1.54(ML307)"
 endchoice
 
 choice DISPLAY_OLED_TYPE
