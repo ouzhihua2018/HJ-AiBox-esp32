@@ -1,6 +1,10 @@
 #include "wifi_board.h"
 #include "audio_codecs/no_audio_codec.h"
+<<<<<<< HEAD
 #include "display/lcd_display.h"
+=======
+#include "zhengchen_lcd_display.h"
+>>>>>>> 4cd292749e9a4c49c740386c0fdbfc702009d3c5
 #include "system_reset.h"
 #include "application.h"
 #include "button.h"
@@ -29,7 +33,11 @@ private:
     Button boot_button_;
     Button volume_up_button_;
     Button volume_down_button_;
+<<<<<<< HEAD
     SpiLcdDisplay* display_;
+=======
+    SpiZHENGCHEN_LcdDisplay* display_;
+>>>>>>> 4cd292749e9a4c49c740386c0fdbfc702009d3c5
     PowerSaveTimer* power_save_timer_;
     PowerManager* power_manager_;
     esp_lcd_panel_io_handle_t panel_io_ = nullptr;
@@ -37,11 +45,35 @@ private:
 
     void InitializePowerManager() {
         power_manager_ = new PowerManager(GPIO_NUM_9);
+<<<<<<< HEAD
 
       /*   power_manager_->OnTemperatureChanged([this](float temp) {
             ESP_LOGI("PowerManager", "Temperature callback: %.1f°C", temp);
         }); */
     
+=======
+        power_manager_->OnTemperatureChanged([this](float chip_temp) {
+            lv_obj_t* popup = display_->GetHighTempPopup();  // 使用Get方法
+            if (popup != nullptr) {
+                if (chip_temp >= 75.0f) {
+                    if (lv_obj_has_flag(popup, LV_OBJ_FLAG_HIDDEN)) {
+                        // 显示温度过高提示框
+                        lv_obj_clear_flag(popup, LV_OBJ_FLAG_HIDDEN);
+                        auto& app = Application::GetInstance();
+                        app.PlaySound(Lang::Sounds::P3_LOW_BATTERY);
+                    }
+                } else {
+                    // 隐藏温度过高提示框
+                    if (!lv_obj_has_flag(popup, LV_OBJ_FLAG_HIDDEN)) {
+                        lv_obj_add_flag(popup, LV_OBJ_FLAG_HIDDEN);
+                    }
+                }
+            } else {
+                ESP_LOGW("PowerManager", "high_temp_popup_ is null!");
+            }
+        });
+
+>>>>>>> 4cd292749e9a4c49c740386c0fdbfc702009d3c5
         power_manager_->OnChargingStatusChanged([this](bool is_charging) {
             if (is_charging) {
                 power_save_timer_->SetEnabled(false);
@@ -71,6 +103,7 @@ private:
             display_->SetEmotion("neutral");
             GetBacklight()->RestoreBrightness();
         });
+<<<<<<< HEAD
         /* power_save_timer_->OnShutdownRequest([this]() {
             ESP_LOGI(TAG, "Shutting down");
             rtc_gpio_set_level(GPIO_NUM_2, 0);
@@ -79,6 +112,8 @@ private:
             esp_lcd_panel_disp_on_off(panel_, false); //关闭显示
             esp_deep_sleep_start();
         }); */
+=======
+>>>>>>> 4cd292749e9a4c49c740386c0fdbfc702009d3c5
         power_save_timer_->SetEnabled(true);
     }
 
@@ -94,6 +129,10 @@ private:
     }
 
     void InitializeButtons() {
+<<<<<<< HEAD
+=======
+        
+>>>>>>> 4cd292749e9a4c49c740386c0fdbfc702009d3c5
         boot_button_.OnClick([this]() {
             power_save_timer_->WakeUp();
             auto& app = Application::GetInstance();
@@ -177,7 +216,11 @@ private:
         ESP_ERROR_CHECK(esp_lcd_panel_mirror(panel_, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y));
         ESP_ERROR_CHECK(esp_lcd_panel_invert_color(panel_, true));
 
+<<<<<<< HEAD
         display_ = new SpiLcdDisplay(panel_io_, panel_, DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, 
+=======
+        display_ = new SpiZHENGCHEN_LcdDisplay(panel_io_, panel_, DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, 
+>>>>>>> 4cd292749e9a4c49c740386c0fdbfc702009d3c5
             DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY, 
         {
             .text_font = &font_puhui_20_4,
@@ -208,9 +251,18 @@ ZHENGCHEN_1_54TFT_WIFI() :
         GetBacklight()->RestoreBrightness();
     }
 
+<<<<<<< HEAD
     virtual AudioCodec* GetAudioCodec() override {
         static NoAudioCodecSimplex audio_codec(AUDIO_INPUT_SAMPLE_RATE, AUDIO_OUTPUT_SAMPLE_RATE,
             AUDIO_I2S_SPK_GPIO_BCLK, AUDIO_I2S_SPK_GPIO_LRCK, AUDIO_I2S_SPK_GPIO_DOUT, AUDIO_I2S_MIC_GPIO_SCK, AUDIO_I2S_MIC_GPIO_WS, AUDIO_I2S_MIC_GPIO_DIN);
+=======
+    // 获取音频编解码器
+    virtual AudioCodec* GetAudioCodec() override {
+        // 静态实例化NoAudioCodecSimplex类
+        static NoAudioCodecSimplex audio_codec(AUDIO_INPUT_SAMPLE_RATE, AUDIO_OUTPUT_SAMPLE_RATE,
+            AUDIO_I2S_SPK_GPIO_BCLK, AUDIO_I2S_SPK_GPIO_LRCK, AUDIO_I2S_SPK_GPIO_DOUT, AUDIO_I2S_MIC_GPIO_SCK, AUDIO_I2S_MIC_GPIO_WS, AUDIO_I2S_MIC_GPIO_DIN);
+        // 返回音频编解码器
+>>>>>>> 4cd292749e9a4c49c740386c0fdbfc702009d3c5
         return &audio_codec;
     }
 
