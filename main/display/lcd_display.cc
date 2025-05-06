@@ -1,17 +1,27 @@
 #include "lcd_display.h"
 
-#include <vector>
-#include <font_awesome_symbols.h>
-#include <esp_log.h>
 #include <esp_err.h>
+#include <esp_log.h>
 #include <esp_lvgl_port.h>
-#include "assets/lang_config.h"
+#include <font_awesome_symbols.h>
+#include <libs/gif/lv_gif.h>
 #include <cstring>
+#include <vector>
+#include "assets/lang_config.h"
+#include "board.h"
 #include "settings.h"
 
-#include "board.h"
-
 #define TAG "LcdDisplay"
+
+#if CONFIG_USE_GIF_EMOTION_STYLE
+LV_IMG_DECLARE(staticstate);
+LV_IMG_DECLARE(sad);
+LV_IMG_DECLARE(happy);
+LV_IMG_DECLARE(scare);
+LV_IMG_DECLARE(buxue);
+LV_IMG_DECLARE(anger);
+LV_IMG_DECLARE(daxiaoyan);
+#endif
 
 // Color definitions for dark theme
 #define DARK_BACKGROUND_COLOR       lv_color_hex(0x121212)     // Dark background
@@ -573,6 +583,22 @@ void LcdDisplay::SetupUI() {
     lv_obj_set_style_radius(status_bar_, 0, 0);
     lv_obj_set_style_bg_color(status_bar_, current_theme.background, 0);
     lv_obj_set_style_text_color(status_bar_, current_theme.text, 0);
+
+#if CONFIG_USE_GIF_EMOTION_STYLE
+    lv_obj_add_flag(status_bar_, LV_OBJ_FLAG_HIDDEN);  // 隐藏状态栏
+    // 创建一个全屏容器（横屏模式）
+    lv_obj_t* overlay_container = lv_obj_create(container_);
+    lv_obj_remove_style_all(overlay_container);  // 移除默认样式
+    lv_obj_set_size(overlay_container, LV_HOR_RES, LV_VER_RES);  // 横屏尺寸（宽度 > 高度）
+    lv_obj_set_style_bg_opa(overlay_container, LV_OPA_TRANSP, 0);  // 透明背景
+    lv_obj_align(overlay_container, LV_ALIGN_TOP_LEFT, 0, 0);  // 对齐到左上角
+
+    // 创建 GIF 对象（全屏横屏显示）
+    emotion_gif = lv_gif_create(overlay_container);
+    lv_obj_set_size(emotion_gif, LV_HOR_RES, LV_VER_RES);  // 与屏幕同尺寸
+    lv_obj_align(emotion_gif, LV_ALIGN_CENTER, 0, 0);  // 居中显示
+    lv_gif_set_src(emotion_gif, &daxiaoyan);  // 设置 GIF 源
+#else
     
     /* Content */
     content_ = lv_obj_create(container_);
@@ -598,7 +624,7 @@ void LcdDisplay::SetupUI() {
     lv_label_set_long_mode(chat_message_label_, LV_LABEL_LONG_WRAP); // 设置为自动换行模式
     lv_obj_set_style_text_align(chat_message_label_, LV_TEXT_ALIGN_CENTER, 0); // 设置文本居中对齐
     lv_obj_set_style_text_color(chat_message_label_, current_theme.text, 0);
-
+#endif
     /* Status bar */
     lv_obj_set_flex_flow(status_bar_, LV_FLEX_FLOW_ROW);
     lv_obj_set_style_pad_all(status_bar_, 0, 0);
@@ -662,40 +688,45 @@ void LcdDisplay::SetupUI() {
 #endif
 
 void LcdDisplay::SetEmotion(const char* emotion) {
+#if CONFIG_USE_GIF_EMOTION_STYLE
+        struct Emotion {
+            const lv_img_dsc_t* gif;
+            const char* text;
+        };
+    
+        static const std::vector<Emotion> emotions = {
+            {&staticstate, "neutral"}, {&happy, "happy"},   {&happy, "laughing"},
+            {&daxiaoyan, "funny"},         {&sad, "sad"},       {&anger, "angry"},
+            {&scare, "surprised"},     {&buxue, "confused"}};
+    
+        std::string_view emotion_view(emotion);
+        auto it = std::find_if(emotions.begin(), emotions.end(),
+                               [&emotion_view](const Emotion& e) { return e.text == emotion_view; });
+    
+        DisplayLockGuard lock(this);
+        if (emotion_gif == nullptr) {
+            return;
+        }
+    
+        if (it != emotions.end()) {
+            lv_gif_set_src(emotion_gif, it->gif);
+        } else {
+            lv_gif_set_src(emotion_gif, &staticstate);
+        } 
+#else
     struct Emotion {
         const char* icon;
         const char* text;
     };
 
     static const std::vector<Emotion> emotions = {
-        {"😶", "neutral"},
-        {"🙂", "happy"},
-        {"😆", "laughing"},
-        {"😂", "funny"},
-        {"😔", "sad"},
-        {"😠", "angry"},
-        {"😭", "crying"},
-        {"😍", "loving"},
-        {"😳", "embarrassed"},
-        {"😯", "surprised"},
-        {"😱", "shocked"},
-        {"🤔", "thinking"},
-        {"😉", "winking"},
-        {"😎", "cool"},
-        {"😌", "relaxed"},
-        {"🤤", "delicious"},
-        {"😘", "kissy"},
-        {"😏", "confident"},
-        {"😴", "sleepy"},
-        {"😜", "silly"},
-        {"🙄", "confused"}
-    };
-    
+        {"😶", "neutral"},  {"🙂", "happy"},   {"😆", "laughing"}, {"😂", "funny"},
+        {"😔", "sad"},      {"😠", "angry"},   {"😭", "crying"},   {"😯", "surprised"},
+        {"🤔", "thinking"}, {"🙄", "confused"}};
     // 查找匹配的表情
     std::string_view emotion_view(emotion);
     auto it = std::find_if(emotions.begin(), emotions.end(),
-        [&emotion_view](const Emotion& e) { return e.text == emotion_view; });
-
+                           [&emotion_view](const Emotion& e) { return e.text == emotion_view; });
     DisplayLockGuard lock(this);
     if (emotion_label_ == nullptr) {
         return;
@@ -708,6 +739,8 @@ void LcdDisplay::SetEmotion(const char* emotion) {
     } else {
         lv_label_set_text(emotion_label_, "😶");
     }
+
+#endif
 }
 
 void LcdDisplay::SetIcon(const char* icon) {

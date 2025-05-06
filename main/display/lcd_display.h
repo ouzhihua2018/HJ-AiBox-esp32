@@ -20,6 +20,10 @@ protected:
     lv_obj_t* container_ = nullptr;
     lv_obj_t* side_bar_ = nullptr;
 
+#if CONFIG_USE_GIF_EMOTION_STYLE
+    lv_obj_t* emotion_gif = nullptr;
+#endif
+
     DisplayFonts fonts_;
 
     void SetupUI();

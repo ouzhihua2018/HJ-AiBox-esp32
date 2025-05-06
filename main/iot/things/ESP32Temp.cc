@@ -14,7 +14,7 @@ public:
     ESP32Temp() : Thing("ESP32Temp", "芯片温度管理") {
         // 定义设备的属性
         properties_.AddNumberProperty("esp32temp", "当前芯片温度", [this]() -> float {
-            auto& board = Board::GetInstgitance();
+            auto& board = Board::GetInstance();
             if (board.GetESP32Temp(esp32temp)) {
                 return esp32temp;
             }
