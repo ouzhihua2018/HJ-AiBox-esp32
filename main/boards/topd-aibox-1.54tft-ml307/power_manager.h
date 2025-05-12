@@ -72,7 +72,7 @@ private:
         }
         uint32_t average_adc = 0;
         for (auto value : adc_values_) {
-            average_adc += value;
+            average_adc += (value + 80);
         }
         average_adc /= adc_values_.size();
 
@@ -81,12 +81,12 @@ private:
             uint16_t adc;
             uint8_t level;
         } levels[] = {
-            {1970, 0},
-            {2062, 20},
-            {2154, 40},
-            {2246, 60},
-            {2338, 80},
-            {2430, 100}
+            {2030, 0},
+            {2134, 20},
+            {2252, 40},
+            {2370, 60},
+            {2488, 80},
+            {2606, 100}
         };
 
         // 低于最低值时
@@ -107,7 +107,7 @@ private:
             }
         }
 
-        // Check low battery status
+        // 检查是否达到低电量阈值
         if (adc_values_.size() >= kBatteryAdcDataCount) {
             bool new_low_battery_status = battery_level_ <= kLowBatteryLevel;
             if (new_low_battery_status != is_low_battery_) {
@@ -161,7 +161,7 @@ public:
 
         // 初始化 ADC
         adc_oneshot_unit_init_cfg_t init_config = {
-            .unit_id = ADC_UNIT_2,
+            .unit_id = ADC_UNIT_1,
             .ulp_mode = ADC_ULP_MODE_DISABLE,
         };
         ESP_ERROR_CHECK(adc_oneshot_new_unit(&init_config, &adc_handle_));
@@ -170,7 +170,7 @@ public:
             .atten = ADC_ATTEN_DB_12,
             .bitwidth = ADC_BITWIDTH_12,
         };
-        ESP_ERROR_CHECK(adc_oneshot_config_channel(adc_handle_, ADC_CHANNEL_6, &chan_config));
+        ESP_ERROR_CHECK(adc_oneshot_config_channel(adc_handle_, ADC_CHANNEL_7, &chan_config));
 
         // 初始化温度传感器
         temperature_sensor_config_t temp_config = {
