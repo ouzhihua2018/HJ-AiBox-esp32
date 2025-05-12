@@ -15,6 +15,9 @@
 #include <esp_lcd_touch_ft5x06.h>
 #include <esp_lvgl_port.h>
 #include <lvgl.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <sys/time.h>
 
 
 #define TAG "LichuangDevBoard"
@@ -42,9 +45,14 @@ private:
     i2c_master_bus_handle_t i2c_bus_;
     i2c_master_dev_handle_t pca9557_handle_;
     Button boot_button_;
-    
+    Button user_button_;
+    Button io11_button_;  // 使用Button类处理IO11引脚
     LcdDisplay* display_;
     Pca9557* pca9557_;
+    int64_t io11_high_start_time_;   // 记录IO11高电平开始时间
+    int64_t io11_low_start_time_;    // 记录IO11低电平开始时间
+    bool was_in_listening_state_;    // 是否曾经进入过聆听状态
+    bool goodbye_message_sent_;      // 是否已发送告别消息
 
     void InitializeI2c() {
         // Initialize I2C peripheral
@@ -85,6 +93,87 @@ private:
             }
             app.ToggleChatState();
         });
+        // 初始化用户按钮(IO10)，模拟唤醒词识别
+        user_button_.OnClick([this]() {
+            auto& app = Application::GetInstance();
+            auto state = app.GetDeviceState();
+            if (state == kDeviceStateIdle || state == kDeviceStateSpeaking) {
+                app.WakeWordInvoke("你好！");
+            }
+        });
+
+        // IO11毫米波传感器 - 触发(高电平)状态的处理
+        io11_button_.OnPressDown([this]() {
+            ESP_LOGI(TAG, "IO11按下 (高电平)");
+            // 记录按下(高电平)开始时间
+            io11_high_start_time_ = esp_timer_get_time() / 1000;
+        });
+        
+        // IO11毫米波传感器 - 结束(低电平)状态的处理
+        io11_button_.OnPressUp([this]() {
+            ESP_LOGI(TAG, "IO11松开 (低电平)");
+            // 记录松开(低电平)开始时间
+            io11_low_start_time_ = esp_timer_get_time() / 1000;
+        });
+        
+        // 创建定时器任务，用于检测IO11持续高电平和低电平时间
+        xTaskCreate(IO11TimerTask, "io11_timer", 4096, this, 5, nullptr);
+    }
+    
+    // IO11定时器任务，检测按钮持续高电平和低电平时间
+    static void IO11TimerTask(void* arg) {
+        LichuangDevBoard* board = static_cast<LichuangDevBoard*>(arg);
+        
+        while (1) {
+            // 获取当前设备状态
+            auto& app = Application::GetInstance();
+            DeviceState current_state = app.GetDeviceState();
+            
+            // 情况1: 设备空闲状态下检测高电平持续时间
+            if (current_state == kDeviceStateIdle) {
+                // 检测是否是高电平状态(触发状态)
+                if (gpio_get_level(IO11_GPIO)) {
+                    int64_t current_time = esp_timer_get_time() / 1000;
+                    int64_t duration = current_time - board->io11_high_start_time_;
+                    
+                    // 如果持续高电平超过5秒，触发唤醒
+                    if (duration >= 5000) {
+                        ESP_LOGI(TAG, "IO11高电平持续5秒，触发唤醒词");
+                        // 使用值捕获代替引用捕获
+                        Application* app_ptr = &app;
+                        app.Schedule([app_ptr]() {
+                            app_ptr->WakeWordInvoke("你好！");
+                        });
+                        board->was_in_listening_state_ = true;  // 修改为true，表示已进入聆听状态
+                        board->goodbye_message_sent_ = false;
+                    }
+                }
+            }
+            // 情况2: 曾经通过高电平触发进入聆听状态，现在处于低电平，检测低电平持续时间
+            else if (board->was_in_listening_state_ && 
+                    current_state == kDeviceStateListening && 
+                    !gpio_get_level(IO11_GPIO) &&
+                    !board->goodbye_message_sent_) {
+                int64_t current_time = esp_timer_get_time() / 1000;
+                int64_t low_duration = current_time - board->io11_low_start_time_;
+                
+                // 如果持续低电平超过5秒，发送结束对话消息
+                if (low_duration >= 5000) {
+                    ESP_LOGI(TAG, "IO11低电平持续5秒，发送结束对话消息");
+                    // 使用值捕获代替引用捕获
+                    Application* app_ptr = &app;
+                    app.Schedule([app_ptr]() {
+                        // app_ptr->SetDeviceState(kDeviceStateIdle);
+                        app_ptr->WakeWordInvoke("再见！");
+                    });
+                    board->goodbye_message_sent_ = true;
+                    board->was_in_listening_state_ = false;
+                }
+            }
+            
+            // 50ms检测一次
+            vTaskDelay(pdMS_TO_TICKS(50));
+        }
     }
 
     void InitializeSt7789Display() {
@@ -173,7 +262,15 @@ private:
     }
 
 public:
-    LichuangDevBoard() : boot_button_(BOOT_BUTTON_GPIO) {
+    LichuangDevBoard() : 
+        boot_button_(BOOT_BUTTON_GPIO), 
+        user_button_(USER_BUTTON_GPIO),
+        io11_button_(IO11_GPIO, true),    // IO11按钮，高电平有效
+        io11_high_start_time_(0),
+        io11_low_start_time_(0),
+        was_in_listening_state_(false),
+        goodbye_message_sent_(false) 
+    {
         InitializeI2c();
         InitializeSpi();
         InitializeSt7789Display();

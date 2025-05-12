@@ -39,13 +39,15 @@
 #define ML307_RX_PIN GPIO_NUM_11
 #define ML307_TX_PIN GPIO_NUM_12
 
-#define SENSOR_GPIO GPIO_NUM_42  // 人体传感器GPIO引脚
+#define USER_BUTTON_GPIO GPIO_NUM_17 // ASRPRO唤醒GPIO引脚
+
+#define HUMAN_SENSOR_GPIO GPIO_NUM_18  // 人体传感器GPIO引脚
 
  // 配置GPIO为输入模式，上拉（根据模块输出特性可选）
     void init_human_sensor() {
     
         gpio_config_t io_conf = {
-            .pin_bit_mask = (1ULL << SENSOR_GPIO),
+            .pin_bit_mask = (1ULL << HUMAN_SENSOR_GPIO),
             .mode = GPIO_MODE_INPUT,
             .pull_up_en = GPIO_PULLUP_DISABLE,
             .pull_down_en = GPIO_PULLDOWN_DISABLE,
