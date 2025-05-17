@@ -74,7 +74,7 @@ private:
             display_->SetEmotion("neutral");
             GetBacklight()->RestoreBrightness();
         });
-        power_save_timer_->OnShutdownRequest([this]() {
+        /*power_save_timer_->OnShutdownRequest([this]() {
             ESP_LOGI(TAG, "Shutting down");
             rtc_gpio_set_level(GPIO_NUM_2, 0);
             // 启用保持功能，确保睡眠期间电平不变
@@ -82,7 +82,8 @@ private:
             esp_lcd_panel_disp_on_off(panel_, false); //关闭显示
             esp_deep_sleep_start();
         });
-        power_save_timer_->SetEnabled(true);
+        power_save_timer_->SetEnabled(true);*/ 
+        //测试不关机，按BOOT可激活
     }
 
     void InitializeSpi() {
@@ -194,8 +195,8 @@ private:
                     int64_t duration = current_time - board->human_sensor_high_start_time_;
                     
                     // 如果持续高电平超过5秒，触发唤醒
-                    if (duration >= 5000) {
-                        ESP_LOGI(TAG, "HUMAN_SENSOR高电平持续5秒，触发唤醒词");
+                    if (duration >= 2000) {
+                        ESP_LOGI(TAG, "HUMAN_SENSOR高电平持续2秒，触发唤醒词");
                         // 使用值捕获代替引用捕获
                         Application* app_ptr = &app;
                         app.Schedule([app_ptr]() {
@@ -215,8 +216,8 @@ private:
                 int64_t low_duration = current_time - board->human_sensor_low_start_time_;
                 
                 // 如果持续低电平超过5秒，发送结束对话消息
-                if (low_duration >= 5000) {
-                    ESP_LOGI(TAG, "HUMAN_SENSOR低电平持续5秒，发送结束对话消息");
+                if (low_duration >= 2000) {
+                    ESP_LOGI(TAG, "HUMAN_SENSOR低电平持续2秒，发送结束对话消息");
                     // 使用值捕获代替引用捕获
                     Application* app_ptr = &app;
                     app.Schedule([app_ptr]() {
