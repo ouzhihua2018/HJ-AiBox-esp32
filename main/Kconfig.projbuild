@@ -40,6 +40,8 @@ choice BOARD_TYPE
         bool "面包板（WiFi+ LCD） ESP32 DevKit"
     config BOARD_TYPE_XMINI_C3
         bool "虾哥 Mini C3"
+    config BOARD_TYPE_TOPD_COMPACT_ML307_LCD
+        bool "面包板TOPD（ML307 AT）"
     config BOARD_TYPE_ESP32S3_KORVO2_V3
         bool "ESP32S3_KORVO2_V3开发板"
     config BOARD_TYPE_ESP_SPARKBOT
@@ -226,6 +228,8 @@ choice DISPLAY_LCD_TYPE
         bool "ST7789, 分辨率240*240, 7PIN"
     config LCD_ST7789_240X135
         bool "ST7789, 分辨率240*135"
+    config LCD_ST7789_76X284
+        bool "ST7789, 分辨率76*284"
     config LCD_ST7735_128X160
         bool "ST7735, 分辨率128*160"
     config LCD_ST7735_128X128
