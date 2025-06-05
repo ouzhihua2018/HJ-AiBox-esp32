@@ -1,0 +1,9 @@
+{
+    "target": "esp32s3",
+    "builds": [
+        {
+            "name": "TopD-compact-ml307-lcd",
+            "sdkconfig_append": []
+        }
+    ]
+}
