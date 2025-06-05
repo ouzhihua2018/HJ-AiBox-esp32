@@ -134,8 +134,6 @@ private:
 #endif
                                     });
     }
-
-
  
     void InitializeButtons() {
         boot_button_.OnClick([this]() {
