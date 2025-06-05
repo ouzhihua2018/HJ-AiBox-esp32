@@ -1,5 +1,4 @@
 #include "background_task.h"
-
 #include <esp_log.h>
 #include <esp_task_wdt.h>
 
