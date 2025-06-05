@@ -115,8 +115,6 @@ private:
 #endif
         
         esp_lcd_panel_reset(panel);
- 
-
         esp_lcd_panel_init(panel);
         esp_lcd_panel_invert_color(panel, DISPLAY_INVERT_COLOR);
         esp_lcd_panel_swap_xy(panel, DISPLAY_SWAP_XY);
