@@ -2,7 +2,9 @@
 #define TOPD_LCD_DISPLAY_H
 
 #include "display/lcd_display.h"
-#include <esp_lvgl_port.h>TOPD : public SpiLcdDisplay {
+#include <esp_lvgl_port.h>
+
+class TOPD_LcdDisplay : public SpiLcdDisplay {
 protected:
     lv_obj_t* high_temp_popup_ = nullptr;  // 高温警告弹窗
     lv_obj_t* high_temp_label_ = nullptr;  // 高温警告标签
