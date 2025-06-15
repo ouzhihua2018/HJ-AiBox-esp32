@@ -253,6 +253,9 @@ choice BOARD_TYPE
     config BOARD_TYPE_ESP32_S3_1_28_BOX
         bool "Spotpear ESP32-S3-1.28-BOX"
         depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_TOPD_1_54TFT_ML307_00
+        bool "上品科技1.54tft 标准版"
+        depends on IDF_TARGET_ESP32S3        
 endchoice
 
 choice ESP_S3_LCD_EV_Board_Version_TYPE
