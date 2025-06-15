@@ -7,7 +7,7 @@
 #include <esp_adc/adc_oneshot.h>
 #include <driver/temperature_sensor.h> 
 #include "application.h"
-#include "top_lcd_display.h"
+#include "topd_lcd_display.h"
 
 class PowerManager {
 private:
