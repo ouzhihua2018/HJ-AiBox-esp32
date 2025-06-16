@@ -255,7 +255,9 @@ choice BOARD_TYPE
         depends on IDF_TARGET_ESP32S3
     config BOARD_TYPE_TOPD_1_54TFT_ML307_00
         bool "上品科技1.54tft 标准版"
-        depends on IDF_TARGET_ESP32S3        
+        depends on IDF_TARGET_ESP32S3
+        select LV_USE_GIF
+        select LV_GIF_CACHE_DECODE_DATA        
 endchoice
 
 choice ESP_S3_LCD_EV_Board_Version_TYPE
