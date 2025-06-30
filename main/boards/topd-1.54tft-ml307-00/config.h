@@ -4,7 +4,7 @@
 
 #include <driver/gpio.h>
 
-#define TOPD_AIBOX_VERSION "1.7.1.2"
+#define TOPD_AIBOX_VERSION "1.7.1.3"
 #define AUDIO_INPUT_SAMPLE_RATE  16000
 #define AUDIO_OUTPUT_SAMPLE_RATE 24000
 
