@@ -22,6 +22,8 @@
 #include "background_task.h"
 #include "audio_processor.h"
 #include "wake_word.h"
+#include "audio_debugger.h"
+#include "asr_pro_level.h"
 
 #define SCHEDULE_EVENT (1 << 0)
 #define SEND_AUDIO_EVENT (1 << 1)
@@ -85,7 +87,9 @@ private:
     ~Application();
 
     std::unique_ptr<WakeWord> wake_word_;
+    std::unique_ptr<asr_pro> asr_pro_;
     std::unique_ptr<AudioProcessor> audio_processor_;
+    std::unique_ptr<AudioDebugger> audio_debugger_;
     Ota ota_;
     std::mutex mutex_;
     std::list<std::function<void()>> main_tasks_;

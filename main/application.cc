@@ -10,6 +10,7 @@
 #include "iot/thing_manager.h"
 #include "assets/lang_config.h"
 #include "mcp_server.h"
+#include "audio_debugger.h"
 
 #if CONFIG_USE_AUDIO_PROCESSOR
 #include "afe_audio_processor.h"
@@ -24,6 +25,9 @@
 #else
 #include "no_wake_word.h"
 #endif
+
+
+
 
 #include <cstring>
 #include <esp_log.h>
@@ -73,6 +77,8 @@ Application::Application() {
 #else
     wake_word_ = std::make_unique<NoWakeWord>();
 #endif
+
+   asr_pro_ = std::make_unique<asr_pro>();
 
     esp_timer_create_args_t clock_timer_args = {
         .callback = [](void* arg) {
@@ -302,9 +308,11 @@ void Application::ToggleChatState() {
 
     if (device_state_ == kDeviceStateIdle) {
         Schedule([this]() {
-            SetDeviceState(kDeviceStateConnecting);
-            if (!protocol_->OpenAudioChannel()) {
-                return;
+            if (!protocol_->IsAudioChannelOpened()) {
+                SetDeviceState(kDeviceStateConnecting);
+                if (!protocol_->OpenAudioChannel()) {
+                    return;
+                }
             }
 
             SetListeningMode(aec_mode_ == kAecOff ? kListeningModeAutoStop : kListeningModeRealtime);
@@ -395,12 +403,12 @@ void Application::Start() {
         input_resampler_.Configure(codec->input_sample_rate(), 16000);
         reference_resampler_.Configure(codec->input_sample_rate(), 16000);
     }
-    codec->Start();
+    codec->Start();  // audio codec enable
 
 #if CONFIG_USE_AUDIO_PROCESSOR
     xTaskCreatePinnedToCore([](void* arg) {
         Application* app = (Application*)arg;
-        app->AudioLoop();
+        app->AudioLoop(); //循环处理输入输出数据，输入I2S读取送入wake_word、audio proc，输出 opus解码播放
         vTaskDelete(NULL);
     }, "audio_loop", 4096 * 2, this, 8, &audio_loop_task_handle_, 1);
 #else
@@ -567,8 +575,16 @@ void Application::Start() {
     });
     bool protocol_started = protocol_->Start();
 
+    audio_debugger_ = std::make_unique<AudioDebugger>();
     audio_processor_->Initialize(codec);
     audio_processor_->OnOutput([this](std::vector<int16_t>&& data) {
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            if (audio_send_queue_.size() >= MAX_AUDIO_PACKETS_IN_QUEUE) {
+                ESP_LOGW(TAG, "Too many audio packets in queue, drop the newest packet");
+                return;
+            }
+        }
         background_task_->Schedule([this, data = std::move(data)]() mutable {
             opus_encoder_->Encode(std::move(data), [this](std::vector<uint8_t>&& opus) {
                 AudioStreamPacket packet;
@@ -657,6 +673,43 @@ void Application::Start() {
     });
     wake_word_->StartDetection();
 
+    asr_pro_->set_wake_callback([this](const std::string & wake_word){ 
+        this-> wake_word_->StopDetection();
+        Schedule([this,&wake_word](){
+            if (!protocol_) {
+                return;
+            }
+            if (device_state_ == kDeviceStateIdle) {
+
+                if (!protocol_->IsAudioChannelOpened()) {
+                    SetDeviceState(kDeviceStateConnecting);
+                    if (!protocol_->OpenAudioChannel()) {
+                        wake_word_->StartDetection();
+                        return;
+                    }
+                }
+
+                ESP_LOGI(TAG, "Asr wake word detected: %s", wake_word.c_str());
+#if CONFIG_USE_AFE_WAKE_WORD
+                // Set the chat state to wake word detected
+                protocol_->SendWakeWordDetected(wake_word);
+#else
+                // Play the pop up sound to indicate the wake word is detected
+                // And wait 60ms to make sure the queue has been processed by audio task
+                ResetDecoder();
+                PlaySound(Lang::Sounds::P3_POPUP);
+                vTaskDelay(pdMS_TO_TICKS(60));
+#endif
+                SetListeningMode(aec_mode_ == kAecOff ? kListeningModeAutoStop : kListeningModeRealtime);
+            } else if (device_state_ == kDeviceStateSpeaking) {
+                AbortSpeaking(kAbortReasonWakeWordDetected);
+            } else if (device_state_ == kDeviceStateActivating) {
+                SetDeviceState(kDeviceStateIdle);
+            }
+        });
+
+    });
+
     // Wait for the new version check to finish
     xEventGroupWaitBits(event_group_, CHECK_NEW_VERSION_DONE_EVENT, pdTRUE, pdFALSE, portMAX_DELAY);
     SetDeviceState(kDeviceStateIdle);
@@ -717,6 +770,9 @@ void Application::Schedule(std::function<void()> callback) {
 // If other tasks need to access the websocket or chat state,
 // they should use Schedule to call this function
 void Application::MainEventLoop() {
+    // Raise the priority of the main event loop to avoid being interrupted by background tasks (which has priority 2)
+    vTaskPrioritySet(NULL, 3);
+
     while (true) {
         auto bits = xEventGroupWaitBits(event_group_, SCHEDULE_EVENT | SEND_AUDIO_EVENT, pdTRUE, pdFALSE, portMAX_DELAY);
 
@@ -746,7 +802,7 @@ void Application::MainEventLoop() {
 void Application::AudioLoop() {
     auto codec = Board::GetInstance().GetAudioCodec();
     while (true) {
-        OnAudioInput();
+        OnAudioInput(); 
         if (codec->output_enabled()) {
             OnAudioOutput();
         }
@@ -872,6 +928,12 @@ bool Application::ReadAudio(std::vector<int16_t>& data, int sample_rate, int sam
             return false;
         }
     }
+    
+    // 音频调试：发送原始音频数据
+    if (audio_debugger_) {
+        audio_debugger_->Feed(data);
+    }
+    
     return true;
 }
 
