@@ -4,7 +4,7 @@
 
 #include <driver/gpio.h>
 
-#define TOPD_AIBOX_VERSION "1.7.1.3"
+#define TOPD_AIBOX_VERSION "1.7.2"
 #define AUDIO_INPUT_SAMPLE_RATE  16000
 #define AUDIO_OUTPUT_SAMPLE_RATE 24000
 
@@ -25,6 +25,9 @@
 #define DISPLAY_DC GPIO_NUM_40
 #define DISPLAY_CS GPIO_NUM_21
 
+#define USER_BUTTON_GPIO GPIO_NUM_17 // ASRPRO唤醒GPIO引脚
+#define HUMAN_SENSOR_GPIO GPIO_NUM_18  // 人体传感器GPIO引脚
+
 #define DISPLAY_WIDTH   240
 #define DISPLAY_HEIGHT  240
 #define DISPLAY_SWAP_XY  false
@@ -39,5 +42,18 @@
 
 #define ML307_RX_PIN GPIO_NUM_11
 #define ML307_TX_PIN GPIO_NUM_12
+
+ 
+ // 配置GPIO为输入模式，上拉（根据模块输出特性可选）
+    void init_human_sensor() {
+        gpio_config_t io_conf = {
+            .pin_bit_mask = (1ULL << HUMAN_SENSOR_GPIO),
+            .mode = GPIO_MODE_INPUT,
+            .pull_up_en = GPIO_PULLUP_DISABLE,
+            .pull_down_en = GPIO_PULLDOWN_DISABLE,
+            .intr_type = GPIO_INTR_DISABLE
+        };
+        gpio_config(&io_conf);
+    }
 
 #endif // _BOARD_CONFIG_H_
