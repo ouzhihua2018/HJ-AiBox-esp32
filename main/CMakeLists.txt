@@ -22,7 +22,7 @@ set(SOURCES "audio_codecs/audio_codec.cc"
             "ota.cc"
             "settings.cc"
             "background_task.cc"
-            "asr_pro_level.cc"
+            "LD2410.cc"
             "main.cc"
             )
 
@@ -200,6 +200,13 @@ file(GLOB BOARD_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/boards/${BOARD_TYPE}/*.c
 )
 list(APPEND SOURCES ${BOARD_SOURCES})
+
+if(CONFIG_HJ_ASR_LEVEL)
+    list(APPEND SOURCES "asr_pro_level.cc")
+elseif(CONFIG_HJ_ASR_UART)
+    list(APPEND SOURCES "asr_pro_uart.cc")
+endif()
+
 
 if(CONFIG_USE_AUDIO_PROCESSOR)
     list(APPEND SOURCES "audio_processing/afe_audio_processor.cc")

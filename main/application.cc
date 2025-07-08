@@ -79,7 +79,7 @@ Application::Application() {
 #endif
 
    asr_pro_ = std::make_unique<asr_pro>();
-
+   ld2410_ = std::make_unique<LD2410>();
     esp_timer_create_args_t clock_timer_args = {
         .callback = [](void* arg) {
             Application* app = (Application*)arg;
@@ -710,6 +710,43 @@ void Application::Start() {
 
     });
 
+    ld2410_->set_wake_callback([this](const std::string & wake_word){ 
+        this-> wake_word_->StopDetection();
+        Schedule([this,&wake_word](){
+            if (!protocol_) {
+                return;
+            }
+            if (device_state_ == kDeviceStateIdle) {
+
+                if (!protocol_->IsAudioChannelOpened()) {
+                    SetDeviceState(kDeviceStateConnecting);
+                    if (!protocol_->OpenAudioChannel()) {
+                        wake_word_->StartDetection();
+                        return;
+                    }
+                }
+
+                ESP_LOGI(TAG, "Asr wake word detected: %s", wake_word.c_str());
+#if CONFIG_USE_AFE_WAKE_WORD
+                // Set the chat state to wake word detected
+                protocol_->SendWakeWordDetected(wake_word);
+#else
+                // Play the pop up sound to indicate the wake word is detected
+                // And wait 60ms to make sure the queue has been processed by audio task
+                ResetDecoder();
+                PlaySound(Lang::Sounds::P3_POPUP);
+                vTaskDelay(pdMS_TO_TICKS(60));
+#endif
+                SetListeningMode(aec_mode_ == kAecOff ? kListeningModeAutoStop : kListeningModeRealtime);
+            } else if (device_state_ == kDeviceStateSpeaking) {
+                AbortSpeaking(kAbortReasonWakeWordDetected);
+            } else if (device_state_ == kDeviceStateActivating) {
+                SetDeviceState(kDeviceStateIdle);
+            }
+        });
+
+    });
+    
     // Wait for the new version check to finish
     xEventGroupWaitBits(event_group_, CHECK_NEW_VERSION_DONE_EVENT, pdTRUE, pdFALSE, portMAX_DELAY);
     SetDeviceState(kDeviceStateIdle);

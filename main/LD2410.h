@@ -1,5 +1,5 @@
-#ifndef __ASR_PRO_H__
-#define __ASR_PRO_H__
+#ifndef __LD2410_H__
+#define __LD2410_H__
 
 #include "esp_attr.h"
 #include "esp_log.h"
@@ -11,24 +11,26 @@
 #include <functional>
 #include <string>
 
-
-#define ASR_DEFAULT_GPIO (gpio_num_t)(CONFIG_ASR_LEVEL_GPIO)
+#define LD2410_DEFAULT_GPIO (gpio_num_t)(CONFIG_LD2410_LEVEL_GPIO)
 #define ESP_INTR_FLAG_DEFAULT 0
-#define ASR_WAIT_BIT BIT0
-    class asr_pro
+#define LD2410_WAIT_BIT BIT1
+
+
+    class LD2410
     {
     public:
         uint32_t active_level_  ; 
-        EventGroupHandle_t asr_eventgroup_;
+        EventGroupHandle_t LD2410_eventgroup_;
         gpio_num_t gpio_num_;
+        
         std::string wake_word_ = "wn9_nihaoxiaozhi_tts";
         void set_wake_callback(std::function<void (const std::string &wake_word)> callback);
         std::function<void (const std::string& wake_word)> on_wake_word_detected_;
-         asr_pro(uint32_t active_level = 1,gpio_num_t gpio_num = ASR_DEFAULT_GPIO);
-        ~asr_pro();
+        LD2410(uint32_t active_level = 1,gpio_num_t gpio_num = LD2410_DEFAULT_GPIO);
+        ~LD2410();
     private:
         TaskHandle_t wake_task_handle_;
-        
+
     };
     
    

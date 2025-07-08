@@ -23,8 +23,15 @@
 #include "audio_processor.h"
 #include "wake_word.h"
 #include "audio_debugger.h"
-#include "asr_pro_level.h"
 
+#ifdef CONFIG_HJ_ASR_LEVEL
+#include "asr_pro_level.h"
+#else 
+#include "asr_pro_uart.h"
+#endif
+
+
+#include "LD2410.h"
 #define SCHEDULE_EVENT (1 << 0)
 #define SEND_AUDIO_EVENT (1 << 1)
 #define CHECK_NEW_VERSION_DONE_EVENT (1 << 2)
@@ -88,6 +95,7 @@ private:
 
     std::unique_ptr<WakeWord> wake_word_;
     std::unique_ptr<asr_pro> asr_pro_;
+    std::unique_ptr<LD2410> ld2410_;
     std::unique_ptr<AudioProcessor> audio_processor_;
     std::unique_ptr<AudioDebugger> audio_debugger_;
     Ota ota_;
