@@ -8,7 +8,7 @@
 #include "mcp_server.h"
 #include "lamp_controller.h"
 #include "iot/thing_manager.h"
-#include "led/single_led.h"
+#include "led/circular_strip.h"
 #include "assets/lang_config.h"
 
 #include <wifi_station.h>
@@ -219,11 +219,11 @@ public:
         
     }
 
+
     virtual Led* GetLed() override {
-        static SingleLed led(BUILTIN_LED_GPIO);
+        static CircularStrip led(BUILTIN_LED_GPIO, 2);
         return &led;
     }
-
     virtual AudioCodec* GetAudioCodec() override {
 #ifdef AUDIO_I2S_METHOD_SIMPLEX
         static NoAudioCodecSimplex audio_codec(AUDIO_INPUT_SAMPLE_RATE, AUDIO_OUTPUT_SAMPLE_RATE,
