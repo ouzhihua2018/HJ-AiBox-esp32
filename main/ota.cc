@@ -172,6 +172,17 @@ bool Ota::CheckVersion() {
         ESP_LOGI(TAG, "No websocket section found!");
     }
 
+    // 新增解析 weChat 节点（二维码链接）
+    cJSON *wechat = cJSON_GetObjectItem(root, "weChat");
+    if (cJSON_IsObject(wechat)) {
+        cJSON *codeUrl = cJSON_GetObjectItem(wechat, "codeUrl");
+        if (cJSON_IsString(codeUrl)) {
+            wechat_code_url_ = codeUrl->valuestring;
+        }
+    } else {
+        ESP_LOGI(TAG, "No weChat section found!");
+    }
+
     has_server_time_ = false;
     cJSON *server_time = cJSON_GetObjectItem(root, "server_time");
     if (cJSON_IsObject(server_time)) {
