@@ -27,6 +27,7 @@ public:
     const std::string& GetCurrentVersion() const { return current_version_; }
     const std::string& GetActivationMessage() const { return activation_message_; }
     const std::string& GetActivationCode() const { return activation_code_; }
+    const std::string& GetWeChatCodeUrl() const { return wechat_code_url_; } // 新增二维码链接获取方法
     std::string GetCheckVersionUrl();
 
 private:
@@ -44,6 +45,7 @@ private:
     std::string firmware_url_;
     std::string activation_challenge_;
     std::string serial_number_;
+    std::string wechat_code_url_; // 用于存储二维码链接
     int activation_timeout_ms_ = 30000;
 
     void Upgrade(const std::string& firmware_url);

@@ -79,12 +79,26 @@ public:
 
     // 添加SetIcon方法声明
     virtual void SetIcon(const char* icon) override; 
+    
+    // 新增：显示二维码接口，qrUrl 为二维码链接
+    virtual void ShowQRCode(const std::string& qrUrl);
+    // 新增：隐藏二维码显示
+    virtual void HideQRCode();
+    // 新增：测试指定的二维码URL
+    virtual void TestQRCodeUrl();
 
-    //otto 新增函数
 private:
+    // 显示二维码文本（当图片下载失败时使用）
+    void ShowQRCodeText(const std::string& qrUrl);
+    // 尝试显示图片
+    bool TryDisplayImage(const std::vector<uint8_t>& image_data);
+    // PNG解码为RGB565格式
+    bool DecodePNGToRGB565(const std::vector<uint8_t>& png_data, std::vector<uint16_t>& rgb565_data);
     void SetupGifContainer();
 
     lv_obj_t* emotion_gif_;  ///< GIF表情组件 >
+    lv_obj_t* qr_container_ = nullptr;  ///< 二维码显示容器
+    lv_obj_t* qr_img_obj_ = nullptr;    ///< 二维码图片对象
 
     // 表情映射
     struct EmotionMap {

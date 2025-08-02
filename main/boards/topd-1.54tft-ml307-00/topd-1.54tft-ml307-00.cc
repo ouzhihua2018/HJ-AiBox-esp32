@@ -35,6 +35,7 @@ private:
     Button volume_down_button_;
     Button user_button_; // 新增语音ASRPRO激活板virtual按键
     Button human_sensor_button_; // 新增人体接近传感器激活按键，利用Button类实现
+    Ota ota_; // OTA更新实例
     TopdEmojiDisplay* display_;
     PowerSaveTimer* power_save_timer_;
     PowerManager* power_manager_;
@@ -250,6 +251,7 @@ private:
         ESP_ERROR_CHECK(esp_lcd_panel_mirror(panel_, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y));
         ESP_ERROR_CHECK(esp_lcd_panel_invert_color(panel_, true));
 
+        
         display_ = new TopdEmojiDisplay(panel_io_, panel_, DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, 
             DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY, 
         {
@@ -258,6 +260,18 @@ private:
             .emoji_font = font_emoji_64_init(),
         });
         display_->SetupHighTempWarningPopup();
+
+        //开机显示机器二维码
+        if (!ota_.GetWeChatCodeUrl().empty()) {
+            ESP_LOGI(TAG, "Found QR code URL: %s", ota_.GetWeChatCodeUrl().c_str());
+            display_->ShowQRCode(ota_.GetWeChatCodeUrl());
+            ESP_LOGI(TAG, "QR code display request completed");
+        } else {
+            ESP_LOGW(TAG, "No QR code URL available from OTA");
+            // 测试指定的二维码URL
+            ESP_LOGI(TAG, "Testing with provided QR code URL");
+            display_->TestQRCodeUrl();
+        }
     }
 
     void InitializeIot() {
