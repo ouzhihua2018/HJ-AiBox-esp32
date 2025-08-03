@@ -1,6 +1,10 @@
 #ifndef TOPD_LCD_DISPLAY_H
 #define TOPD_LCD_DISPLAY_H
 
+#include <vector>
+#include <string>
+#include <cstdint>
+#include <memory>
 #include <libs/gif/lv_gif.h>
 
 #include "display/lcd_display.h"
@@ -88,17 +92,17 @@ public:
     virtual void TestQRCodeUrl();
 
 private:
-    // 显示二维码文本（当图片下载失败时使用）
-    void ShowQRCodeText(const std::string& qrUrl);
-    // 尝试显示图片
-    bool TryDisplayImage(const std::vector<uint8_t>& image_data);
-    // PNG解码为RGB565格式
-    bool DecodePNGToRGB565(const std::vector<uint8_t>& png_data, std::vector<uint16_t>& rgb565_data);
+    // QR码显示相关方法
+    void ShowQRError();
+    void DisplayQRImage(const std::vector<uint8_t>& image_data);
     void SetupGifContainer();
 
     lv_obj_t* emotion_gif_;  ///< GIF表情组件 >
     lv_obj_t* qr_container_ = nullptr;  ///< 二维码显示容器
     lv_obj_t* qr_img_obj_ = nullptr;    ///< 二维码图片对象
+    
+    // QR码图片数据管理（暂时保留用于未来扩展）
+    std::unique_ptr<std::vector<uint16_t>> qr_rgb565_data_;  ///< RGB565图片数据
 
     // 表情映射
     struct EmotionMap {

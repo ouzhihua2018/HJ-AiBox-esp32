@@ -262,16 +262,17 @@ private:
         display_->SetupHighTempWarningPopup();
 
         //开机显示机器二维码
-        if (!ota_.GetWeChatCodeUrl().empty()) {
+        if (!ota_.GetWeChatCodeUrl().empty()) 
+            {
             ESP_LOGI(TAG, "Found QR code URL: %s", ota_.GetWeChatCodeUrl().c_str());
             display_->ShowQRCode(ota_.GetWeChatCodeUrl());
             ESP_LOGI(TAG, "QR code display request completed");
-        } else {
-            ESP_LOGW(TAG, "No QR code URL available from OTA");
-            // 测试指定的二维码URL
-            ESP_LOGI(TAG, "Testing with provided QR code URL");
-            display_->TestQRCodeUrl();
-        }
+            } 
+        
+        else {
+            ESP_LOGW(TAG, "QR code unavailable");
+            display_->ShowQRCode("QR code Failed");
+            }
     }
 
     void InitializeIot() {
