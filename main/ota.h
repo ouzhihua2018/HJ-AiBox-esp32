@@ -28,6 +28,10 @@ public:
     const std::string& GetActivationMessage() const { return activation_message_; }
     const std::string& GetActivationCode() const { return activation_code_; }
     const std::string& GetWeChatCodeUrl() const { return wechat_code_url_; } // 新增二维码链接获取方法
+    bool HasWeChatCodeUrl() const { return !wechat_code_url_.empty(); }  // 检查是否有二维码链接
+    bool DownloadAndDisplayQRCode();  // 下载并显示二维码
+    bool TestQRCodeDownload(const std::string& test_url);  // 测试指定URL的二维码下载
+    const std::string& GetQRImageData() const { return qr_image_data_; }  // 获取下载的二维码图片数据
     std::string GetCheckVersionUrl();
 
 private:
@@ -46,6 +50,7 @@ private:
     std::string activation_challenge_;
     std::string serial_number_;
     std::string wechat_code_url_; // 用于存储二维码链接
+    std::string qr_image_data_;   // 用于存储下载的二维码图片数据
     int activation_timeout_ms_ = 30000;
 
     void Upgrade(const std::string& firmware_url);

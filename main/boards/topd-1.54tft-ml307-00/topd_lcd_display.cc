@@ -126,13 +126,24 @@ void TopdEmojiDisplay::SetEmotion(const char* emotion) {
 
     DisplayLockGuard lock(this);
 
-    // 隐藏二维码显示
+    // 检查是否正在显示二维码，如果是则不显示表情
+    if (qr_img_obj_ != nullptr && !lv_obj_has_flag(qr_img_obj_, LV_OBJ_FLAG_HIDDEN)) {
+        ESP_LOGI(TAG, "QR code is being displayed, skipping emotion: %s", emotion);
+        // 隐藏表情GIF，确保不与二维码冲突
+        lv_obj_add_flag(emotion_gif_, LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
+
+    // 隐藏二维码显示（如果有的话）
     if (qr_container_ != nullptr) {
         lv_obj_add_flag(qr_container_, LV_OBJ_FLAG_HIDDEN);
     }
     if (qr_img_obj_ != nullptr) {
         lv_obj_add_flag(qr_img_obj_, LV_OBJ_FLAG_HIDDEN);
     }
+
+    // 显示表情GIF
+    lv_obj_clear_flag(emotion_gif_, LV_OBJ_FLAG_HIDDEN);
 
     for (const auto& map : emotion_maps_) {
         if (map.name && strcmp(map.name, emotion) == 0) {
@@ -261,6 +272,64 @@ void TopdEmojiDisplay::ShowQRCode(const std::string& qrUrl) {
     ESP_LOGI(TAG, "Image cache cleared");
 }
 
+bool TopdEmojiDisplay::ShowQRCodeImage(const uint8_t* image_data, size_t data_size) {
+    ESP_LOGI(TAG, "=== Starting QR Code Image Display ===");
+    
+    if (!image_data || data_size == 0) {
+        ESP_LOGE(TAG, "❌ Invalid image data (null pointer or zero size)");
+        ShowQRError();
+        return false;
+    }
+
+    ESP_LOGI(TAG, "QR code image data size: %d bytes", data_size);
+
+    // 详细检查PNG文件头
+    if (data_size < 8) {
+        ESP_LOGE(TAG, "❌ Image data too small for PNG header validation (%d bytes)", data_size);
+        ShowQRError();
+        return false;
+    }
+    
+    // 显示原始字节用于调试
+    ESP_LOGI(TAG, "Image header bytes: %02X %02X %02X %02X %02X %02X %02X %02X", 
+            image_data[0], image_data[1], image_data[2], image_data[3], 
+            image_data[4], image_data[5], image_data[6], image_data[7]);
+    
+    // 检查PNG文件头：0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A
+    if (memcmp(image_data, "\x89PNG\r\n\x1a\n", 8) != 0) {
+        ESP_LOGE(TAG, "❌ Invalid PNG format - header mismatch");
+        ESP_LOGE(TAG, "Expected: 89 50 4E 47 0D 0A 1A 0A");
+        ESP_LOGE(TAG, "Got:      %02X %02X %02X %02X %02X %02X %02X %02X", 
+                image_data[0], image_data[1], image_data[2], image_data[3], 
+                image_data[4], image_data[5], image_data[6], image_data[7]);
+        ShowQRError();
+        return false;
+    }
+    
+    ESP_LOGI(TAG, "✅ PNG header validation passed");
+
+    // 检查图片大小合理性
+    if (data_size < 500) {
+        ESP_LOGW(TAG, "⚠️  Image size seems small for a QR code (%d bytes)", data_size);
+    } else if (data_size > 100000) {
+        ESP_LOGW(TAG, "⚠️  Image size seems large for a QR code (%d bytes)", data_size);
+    } else {
+        ESP_LOGI(TAG, "✅ Image size is reasonable for a QR code");
+    }
+
+    // 将数据转换为vector格式用于现有的DisplayQRImage方法
+    std::vector<uint8_t> image_vector(image_data, image_data + data_size);
+    
+    ESP_LOGI(TAG, "Calling DisplayQRImage to render on screen...");
+    
+    // 调用现有的显示方法
+    DisplayQRImage(image_vector);
+    
+    ESP_LOGI(TAG, "✅ QR code image display completed successfully");
+    ESP_LOGI(TAG, "=== QR Code Image Display Complete ===");
+    return true;
+}
+
 void TopdEmojiDisplay::ShowQRError() {
     DisplayLockGuard lock(this);
     
@@ -291,14 +360,30 @@ void TopdEmojiDisplay::ShowQRError() {
 }
 
 void TopdEmojiDisplay::DisplayQRImage(const std::vector<uint8_t>& image_data) {
+    ESP_LOGI(TAG, "=== Rendering QR Code on Display ===");
+    ESP_LOGI(TAG, "Image data size: %d bytes", image_data.size());
+    
     DisplayLockGuard lock(this);
     
-    // 隐藏其他元素
+    // 隐藏所有其他UI元素，确保只显示二维码
+    ESP_LOGI(TAG, "Hiding other UI elements...");
     if (emotion_gif_) {
         lv_obj_add_flag(emotion_gif_, LV_OBJ_FLAG_HIDDEN);
+        ESP_LOGI(TAG, "✅ Emotion GIF hidden");
     }
     if (chat_message_label_) {
         lv_obj_add_flag(chat_message_label_, LV_OBJ_FLAG_HIDDEN);
+        ESP_LOGI(TAG, "✅ Chat message label hidden");
+    }
+    
+    // 设置整个内容区域为白色背景
+    ESP_LOGI(TAG, "Setting white background...");
+    if (content_) {
+        lv_obj_set_style_bg_color(content_, lv_color_white(), 0);
+        lv_obj_set_style_bg_opa(content_, LV_OPA_COVER, 0);
+        ESP_LOGI(TAG, "✅ White background applied");
+    } else {
+        ESP_LOGW(TAG, "⚠️  Content container is null");
     }
 
     // 创建或更新QR码显示
@@ -348,7 +433,10 @@ void TopdEmojiDisplay::DisplayQRImage(const std::vector<uint8_t>& image_data) {
 
     lv_obj_clear_flag(qr_img_obj_, LV_OBJ_FLAG_HIDDEN);
     
-    ESP_LOGI(TAG, "QR code image displayed (simplified version)");
+    ESP_LOGI(TAG, "✅ QR code object made visible");
+    ESP_LOGI(TAG, "✅ QR code rendering completed successfully");
+    ESP_LOGI(TAG, "Display status: White background with centered QR code (240x240)");
+    ESP_LOGI(TAG, "=== QR Code Display Rendering Complete ===");
 }
 
 void TopdEmojiDisplay::HideQRCode() {
@@ -356,6 +444,12 @@ void TopdEmojiDisplay::HideQRCode() {
     
     if (qr_img_obj_ != nullptr) {
         lv_obj_add_flag(qr_img_obj_, LV_OBJ_FLAG_HIDDEN);
+    }
+    
+    // 恢复原来的背景色（使用主题背景色）
+    if (content_) {
+        lv_obj_set_style_bg_color(content_, current_theme_.background, 0);
+        lv_obj_set_style_bg_opa(content_, LV_OPA_COVER, 0);
     }
     
     // 恢复其他元素
@@ -366,7 +460,7 @@ void TopdEmojiDisplay::HideQRCode() {
         lv_obj_clear_flag(chat_message_label_, LV_OBJ_FLAG_HIDDEN);
     }
     
-    ESP_LOGI(TAG, "QR code hidden");
+    ESP_LOGI(TAG, "QR code hidden, background restored");
 }
 
 void TopdEmojiDisplay::TestQRCodeUrl() {
