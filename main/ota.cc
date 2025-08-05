@@ -44,7 +44,8 @@ std::string Ota::GetCheckVersionUrl() {
     Settings settings("wifi", false);
     std::string url = settings.GetString("ota_url");
     if (url.empty()) {
-        url = CONFIG_OTA_URL;
+        // 使用指定的服务器地址
+        url = "http://core.device.158box.com/xiaozhi/ota2/";
     }
     return url;
 }
@@ -84,25 +85,43 @@ bool Ota::CheckVersion() {
         return false;
     }
 
+    ESP_LOGI(TAG, "=== OTA Request Details ===");
+    ESP_LOGI(TAG, "URL: %s", url.c_str());
+    ESP_LOGI(TAG, "Device-Id: %s", SystemInfo::GetMacAddress().c_str());
+    ESP_LOGI(TAG, "Client-Id: %s", board.GetUuid().c_str());
+
     auto http = std::unique_ptr<Http>(SetupHttp());
 
     std::string data = board.GetJson();
+    ESP_LOGI(TAG, "Request JSON length: %d bytes", data.length());
+    ESP_LOGI(TAG, "Request JSON (first 500 chars): %.500s", data.c_str());
+    
     std::string method = data.length() > 0 ? "POST" : "GET";
     http->SetContent(std::move(data));
 
+    ESP_LOGI(TAG, "Sending %s request to OTA server...", method.c_str());
     if (!http->Open(method, url)) {
-        ESP_LOGE(TAG, "Failed to open HTTP connection");
+        ESP_LOGE(TAG, "Failed to open HTTP connection to %s", url.c_str());
         return false;
     }
 
     auto status_code = http->GetStatusCode();
+    ESP_LOGI(TAG, "OTA server response status: %d", status_code);
+    
     if (status_code != 200) {
         ESP_LOGE(TAG, "Failed to check version, status code: %d", status_code);
+        // 读取错误响应内容用于调试
+        std::string error_response = http->ReadAll();
+        ESP_LOGE(TAG, "Error response: %s", error_response.c_str());
+        http->Close();
         return false;
     }
 
     data = http->ReadAll();
     http->Close();
+    
+    ESP_LOGI(TAG, "OTA server response length: %d bytes", data.length());
+    ESP_LOGI(TAG, "OTA server response: %s", data.c_str());
 
     // Response: { "firmware": { "version": "1.0.0", "url": "http://" } }
     // Parse the JSON response and check if the version is newer
@@ -172,15 +191,39 @@ bool Ota::CheckVersion() {
         ESP_LOGI(TAG, "No websocket section found!");
     }
 
-    // 新增解析 weChat 节点（二维码链接）
+    // 解析 weChat 节点（二维码链接）- 从OTA响应中直接获取
+    ESP_LOGI(TAG, "=== Parsing WeChat QR Code URL ===");
     cJSON *wechat = cJSON_GetObjectItem(root, "weChat");
     if (cJSON_IsObject(wechat)) {
+        ESP_LOGI(TAG, "✅ Found weChat section in OTA response");
         cJSON *codeUrl = cJSON_GetObjectItem(wechat, "codeUrl");
-        if (cJSON_IsString(codeUrl)) {
+        if (cJSON_IsString(codeUrl) && codeUrl->valuestring != nullptr) {
             wechat_code_url_ = codeUrl->valuestring;
+            if (!wechat_code_url_.empty()) {
+                ESP_LOGI(TAG, "✅ Got WeChat QR code URL: %s", wechat_code_url_.c_str());
+                ESP_LOGI(TAG, "QR code URL length: %d characters", wechat_code_url_.length());
+                
+                // 验证URL格式
+                if (wechat_code_url_.find("http") == 0 && wechat_code_url_.find(".png") != std::string::npos) {
+                    ESP_LOGI(TAG, "✅ QR code URL format validation passed");
+                } else {
+                    ESP_LOGW(TAG, "⚠️  QR code URL format may be invalid");
+                }
+            } else {
+                ESP_LOGW(TAG, "⚠️  QR code URL is empty string");
+                wechat_code_url_.clear();
+            }
+        } else {
+            ESP_LOGW(TAG, "⚠️  codeUrl field is not a valid string or is null");
         }
     } else {
-        ESP_LOGI(TAG, "No weChat section found!");
+        ESP_LOGI(TAG, "❌ No weChat section found in OTA response");
+        ESP_LOGI(TAG, "Available JSON keys in response:");
+        cJSON *item = root->child;
+        while (item) {
+            ESP_LOGI(TAG, "  - %s", item->string ? item->string : "null");
+            item = item->next;
+        }
     }
 
     has_server_time_ = false;
@@ -476,3 +519,118 @@ esp_err_t Ota::Activate() {
     ESP_LOGI(TAG, "Activation successful");
     return ESP_OK;
 }
+
+bool Ota::DownloadAndDisplayQRCode() {
+    ESP_LOGI(TAG, "=== Starting QR Code Download ===");
+    
+    if (wechat_code_url_.empty()) {
+        ESP_LOGE(TAG, "❌ QR code URL is empty, make sure CheckVersion() was called first");
+        return false;
+    }
+
+    ESP_LOGI(TAG, "QR code URL: %s", wechat_code_url_.c_str());
+    ESP_LOGI(TAG, "URL length: %d characters", wechat_code_url_.length());
+
+    // 验证URL格式
+    if (wechat_code_url_.find("http") != 0) {
+        ESP_LOGE(TAG, "❌ Invalid QR code URL format (missing http/https)");
+        return false;
+    }
+
+    auto& board = Board::GetInstance();
+    auto http = std::unique_ptr<Http>(board.CreateHttp());
+
+    // 设置下载图片的请求头
+    http->SetHeader("User-Agent", "ESP32-QRCode-Downloader/1.0");
+    http->SetHeader("Accept", "image/png,image/*,*/*");
+    http->SetHeader("Cache-Control", "no-cache");
+    
+    ESP_LOGI(TAG, "Opening HTTP connection for QR code download...");
+    if (!http->Open("GET", wechat_code_url_)) {
+        ESP_LOGE(TAG, "❌ Failed to open HTTP connection for QR code download");
+        ESP_LOGE(TAG, "   URL: %s", wechat_code_url_.c_str());
+        return false;
+    }
+
+    auto status_code = http->GetStatusCode();
+    ESP_LOGI(TAG, "QR code download response status: %d", status_code);
+    
+    if (status_code != 200) {
+        ESP_LOGE(TAG, "❌ Failed to download QR code, status code: %d", status_code);
+        
+        // 读取错误响应用于调试
+        std::string error_response = http->ReadAll();
+        if (!error_response.empty()) {
+            ESP_LOGE(TAG, "Error response body: %s", error_response.c_str());
+        }
+        
+        http->Close();
+        return false;
+    }
+
+    // 读取图片数据
+    ESP_LOGI(TAG, "Reading QR code image data...");
+    std::string image_data = http->ReadAll();
+    http->Close();
+
+    if (image_data.empty()) {
+        ESP_LOGE(TAG, "❌ Downloaded QR code image is empty");
+        return false;
+    }
+
+    ESP_LOGI(TAG, "✅ QR code image downloaded successfully");
+    ESP_LOGI(TAG, "Image size: %d bytes", image_data.length());
+
+    // 验证PNG头部
+    if (image_data.length() >= 8) {
+        const uint8_t* data = reinterpret_cast<const uint8_t*>(image_data.data());
+        // PNG文件头：89 50 4E 47 0D 0A 1A 0A
+        if (data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47) {
+            ESP_LOGI(TAG, "✅ PNG header validation passed");
+            ESP_LOGI(TAG, "PNG signature: %02X %02X %02X %02X %02X %02X %02X %02X", 
+                    data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7]);
+        } else {
+            ESP_LOGW(TAG, "⚠️  PNG header validation failed - may not be a valid PNG file");
+            ESP_LOGW(TAG, "File signature: %02X %02X %02X %02X %02X %02X %02X %02X", 
+                    data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7]);
+        }
+    } else {
+        ESP_LOGW(TAG, "⚠️  Image data too small to validate PNG header");
+    }
+
+    // 检查图片大小是否合理（QR码图片通常在1KB-50KB之间）
+    if (image_data.length() < 500) {
+        ESP_LOGW(TAG, "⚠️  Image size seems too small for a QR code (%d bytes)", image_data.length());
+    } else if (image_data.length() > 100000) {
+        ESP_LOGW(TAG, "⚠️  Image size seems too large for a QR code (%d bytes)", image_data.length());
+    } else {
+        ESP_LOGI(TAG, "✅ Image size is reasonable for a QR code");
+    }
+    
+    // 将图片数据保存到成员变量中，供Application调用
+    qr_image_data_ = image_data;
+    
+    ESP_LOGI(TAG, "=== QR Code Download Complete ===");
+    return true;
+}
+
+bool Ota::TestQRCodeDownload(const std::string& test_url) {
+    ESP_LOGI(TAG, "Testing QR code download with URL: %s", test_url.c_str());
+    
+    // 临时保存原URL
+    std::string original_url = wechat_code_url_;
+    
+    // 设置测试URL
+    wechat_code_url_ = test_url;
+    
+    // 执行下载和显示
+    bool result = DownloadAndDisplayQRCode();
+    
+    // 恢复原URL
+    wechat_code_url_ = original_url;
+    
+    ESP_LOGI(TAG, "QR code test %s", result ? "SUCCESS" : "FAILED");
+    return result;
+}
+
+

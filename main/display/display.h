@@ -29,6 +29,9 @@ public:
     virtual void SetTheme(const std::string& theme_name);
     virtual std::string GetTheme() { return current_theme_name_; }
     virtual void UpdateStatusBar(bool update_all = false);
+    
+    // 新增：显示二维码图片数据
+    virtual bool ShowQRCodeImage(const uint8_t* image_data, size_t data_size) { return false; }
 
     inline int width() const { return width_; }
     inline int height() const { return height_; }

@@ -79,6 +79,10 @@ public:
     void SetAecMode(AecMode mode);
     AecMode GetAecMode() const { return aec_mode_; }
     BackgroundTask* GetBackgroundTask() const { return background_task_; }
+    
+    // 测试二维码功能
+    void TestQRCodeFunction();
+    void TestOTARequestFormat();
 
 private:
     Application();
@@ -129,6 +133,8 @@ private:
     void SetDecodeSampleRate(int sample_rate, int frame_duration);
     void CheckNewVersion();
     void ShowActivationCode();
+    void ShowQRCode();  // 新增：显示二维码方法
+    void HandleDeviceActivationAndQRCode();  // 新增：处理设备关联状态和二维码显示
     void OnClockTimer();
     void SetListeningMode(ListeningMode mode);
     void AudioLoop();

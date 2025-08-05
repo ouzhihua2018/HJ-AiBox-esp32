@@ -261,18 +261,19 @@ private:
         });
         display_->SetupHighTempWarningPopup();
 
-        //开机显示机器二维码
-        if (!ota_.GetWeChatCodeUrl().empty()) 
-            {
-            ESP_LOGI(TAG, "Found QR code URL: %s", ota_.GetWeChatCodeUrl().c_str());
-            display_->ShowQRCode(ota_.GetWeChatCodeUrl());
-            ESP_LOGI(TAG, "QR code display request completed");
-            } 
-        
-        else {
-            ESP_LOGW(TAG, "QR code unavailable");
-            display_->ShowQRCode("QR code Failed");
-            }
+        // 注释掉原有的开机二维码显示逻辑，改为在Application中通过OTA获取后显示
+        // //开机显示机器二维码
+        // if (!ota_.GetWeChatCodeUrl().empty()) 
+        //     {
+        //     ESP_LOGI(TAG, "Found QR code URL: %s", ota_.GetWeChatCodeUrl().c_str());
+        //     display_->ShowQRCode(ota_.GetWeChatCodeUrl());
+        //     ESP_LOGI(TAG, "QR code display request completed");
+        //     } 
+        // 
+        // else {
+        //     ESP_LOGW(TAG, "QR code unavailable");
+        //     display_->ShowQRCode("QR code Failed");
+        //     }
     }
 
     void InitializeIot() {

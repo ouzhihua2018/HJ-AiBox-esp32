@@ -86,6 +86,8 @@ public:
     
     // 新增：显示二维码接口，qrUrl 为二维码链接
     virtual void ShowQRCode(const std::string& qrUrl);
+    // 新增：显示二维码图片数据
+    virtual bool ShowQRCodeImage(const uint8_t* image_data, size_t data_size);
     // 新增：隐藏二维码显示
     virtual void HideQRCode();
     // 新增：测试指定的二维码URL

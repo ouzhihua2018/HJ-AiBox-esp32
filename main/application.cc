@@ -166,33 +166,125 @@ void Application::CheckNewVersion() {
             });
 
             // If upgrade success, the device will reboot and never reach here
+            // 升级失败，保持原有提示词，然后检查设备关联状态
             display->SetStatus(Lang::Strings::UPGRADE_FAILED);
-            ESP_LOGI(TAG, "Firmware upgrade failed...");
+            ESP_LOGI(TAG, "Firmware upgrade failed, checking device association status...");
             vTaskDelay(pdMS_TO_TICKS(3000));
-            Reboot();
+            
+            // 升级失败后，检查设备关联状态决定后续行为
+            HandleDeviceActivationAndQRCode();
+            
+            xEventGroupSetBits(event_group_, CHECK_NEW_VERSION_DONE_EVENT);
             return;
         }
 
         // No new version, mark the current version as valid
         ota_.MarkCurrentVersionValid();
-        if (!ota_.HasActivationCode() && !ota_.HasActivationChallenge()) {
-            xEventGroupSetBits(event_group_, CHECK_NEW_VERSION_DONE_EVENT);
-            // Exit the loop if done checking new version
-            break;
-        }
+        
+        // 检查设备关联状态和二维码显示逻辑
+        HandleDeviceActivationAndQRCode();
+        
+        xEventGroupSetBits(event_group_, CHECK_NEW_VERSION_DONE_EVENT);
+        break;
+    }
+}
 
+// 注释掉显示激活码填写地址的代码
+// void Application::ShowActivationCode() {
+//     auto& message = ota_.GetActivationMessage();
+//     auto& code = ota_.GetActivationCode();
+// 
+//     struct digit_sound {
+//         char digit;
+//         const std::string_view& sound;
+//     };
+//     static const std::array<digit_sound, 10> digit_sounds{{
+//         digit_sound{'0', Lang::Sounds::P3_0},
+//         digit_sound{'1', Lang::Sounds::P3_1}, 
+//         digit_sound{'2', Lang::Sounds::P3_2},
+//         digit_sound{'3', Lang::Sounds::P3_3},
+//         digit_sound{'4', Lang::Sounds::P3_4},
+//         digit_sound{'5', Lang::Sounds::P3_5},
+//         digit_sound{'6', Lang::Sounds::P3_6},
+//         digit_sound{'7', Lang::Sounds::P3_7},
+//         digit_sound{'8', Lang::Sounds::P3_8},
+//         digit_sound{'9', Lang::Sounds::P3_9}
+//     }};
+// 
+//     // This sentence uses 9KB of SRAM, so we need to wait for it to finish
+//     Alert(Lang::Strings::ACTIVATION, message.c_str(), "happy", Lang::Sounds::P3_ACTIVATION);
+// 
+//     for (const auto& digit : code) {
+//         auto it = std::find_if(digit_sounds.begin(), digit_sounds.end(),
+//             [digit](const digit_sound& ds) { return ds.digit == digit; });
+//         if (it != digit_sounds.end()) {
+//             PlaySound(it->sound);
+//         }
+//     }
+// }
+
+void Application::ShowQRCode() {
+    auto display = Board::GetInstance().GetDisplay();
+    
+    ESP_LOGI(TAG, "Starting QR code display process");
+    
+    // 尝试从OTA下载二维码
+    if (ota_.DownloadAndDisplayQRCode()) {
+        // 获取下载的图片数据
+        const std::string& image_data = ota_.GetQRImageData();
+        
+        if (!image_data.empty()) {
+            // 尝试显示二维码图片
+            if (display->ShowQRCodeImage(reinterpret_cast<const uint8_t*>(image_data.data()), image_data.length())) {
+                // 二维码显示成功，确保不显示任何表情和状态信息
+                ESP_LOGI(TAG, "QR code image displayed successfully, hiding all other UI elements");
+                
+                // 清除所有状态文字和聊天信息，确保屏幕只显示二维码
+                display->SetStatus("");
+                display->SetChatMessage("system", "");
+                
+                // 不播放任何音效，保持静默
+                // 不调用SetEmotion，让DisplayQRImage方法处理所有UI隐藏
+                ESP_LOGI(TAG, "QR code display completed, screen shows only QR code with white background");
+                
+                return;
+            }
+        }
+    }
+    
+    // 二维码获取或显示失败
+    ESP_LOGE(TAG, "Failed to download or display QR code");
+    display->SetChatMessage("system", "QR Code Failed");
+    
+    // 播放失败提示音，重复10次
+    for (int i = 0; i < 10 && device_state_ == kDeviceStateActivating; ++i) {
+        Alert(Lang::Strings::ERROR, "二维码获取失败，请检查网络设置", "sad", Lang::Sounds::P3_EXCLAMATION);
+        vTaskDelay(pdMS_TO_TICKS(5000)); // 每5秒重复一次
+    }
+}
+
+void Application::HandleDeviceActivationAndQRCode() {
+    auto display = Board::GetInstance().GetDisplay();
+    
+    // 检查是否有激活码或激活挑战（表示设备未关联）
+    if (ota_.HasActivationCode() || ota_.HasActivationChallenge()) {
+        ESP_LOGI(TAG, "Device is not associated, showing QR code for activation");
         display->SetStatus(Lang::Strings::ACTIVATION);
-        // Activation code is shown to the user and waiting for the user to input
-        if (ota_.HasActivationCode()) {
-            ShowActivationCode();
+        
+        // 设备未关联，显示二维码
+        if (ota_.HasWeChatCodeUrl()) {
+            ShowQRCode();
+        } else {
+            ESP_LOGW(TAG, "No QR code URL available for unassociated device");
+            display->SetChatMessage("system", "QR Code Not Available");
         }
-
-        // This will block the loop until the activation is done or timeout
+        
+        // 执行激活流程
         for (int i = 0; i < 10; ++i) {
             ESP_LOGI(TAG, "Activating... %d/%d", i + 1, 10);
             esp_err_t err = ota_.Activate();
             if (err == ESP_OK) {
-                xEventGroupSetBits(event_group_, CHECK_NEW_VERSION_DONE_EVENT);
+                ESP_LOGI(TAG, "Device activation successful");
                 break;
             } else if (err == ESP_ERR_TIMEOUT) {
                 vTaskDelay(pdMS_TO_TICKS(3000));
@@ -203,39 +295,11 @@ void Application::CheckNewVersion() {
                 break;
             }
         }
-    }
-}
-
-void Application::ShowActivationCode() {
-    auto& message = ota_.GetActivationMessage();
-    auto& code = ota_.GetActivationCode();
-
-    struct digit_sound {
-        char digit;
-        const std::string_view& sound;
-    };
-    static const std::array<digit_sound, 10> digit_sounds{{
-        digit_sound{'0', Lang::Sounds::P3_0},
-        digit_sound{'1', Lang::Sounds::P3_1}, 
-        digit_sound{'2', Lang::Sounds::P3_2},
-        digit_sound{'3', Lang::Sounds::P3_3},
-        digit_sound{'4', Lang::Sounds::P3_4},
-        digit_sound{'5', Lang::Sounds::P3_5},
-        digit_sound{'6', Lang::Sounds::P3_6},
-        digit_sound{'7', Lang::Sounds::P3_7},
-        digit_sound{'8', Lang::Sounds::P3_8},
-        digit_sound{'9', Lang::Sounds::P3_9}
-    }};
-
-    // This sentence uses 9KB of SRAM, so we need to wait for it to finish
-    Alert(Lang::Strings::ACTIVATION, message.c_str(), "happy", Lang::Sounds::P3_ACTIVATION);
-
-    for (const auto& digit : code) {
-        auto it = std::find_if(digit_sounds.begin(), digit_sounds.end(),
-            [digit](const digit_sound& ds) { return ds.digit == digit; });
-        if (it != digit_sounds.end()) {
-            PlaySound(it->sound);
-        }
+    } else {
+        ESP_LOGI(TAG, "Device is already associated, proceeding with normal operation");
+        // 设备已关联，按原有固件版本正常使用，不显示二维码
+        display->SetStatus(Lang::Strings::STANDBY);
+        display->SetChatMessage("system", "");
     }
 }
 
@@ -663,7 +727,9 @@ void Application::Start() {
 
     if (protocol_started) {
         std::string message = std::string(Lang::Strings::VERSION) + ota_.GetCurrentVersion();
-        display->ShowNotification(message.c_str());
+        // 将版本信息显示在屏幕顶部居中位置
+        display->SetStatus(message.c_str());
+        // 清除聊天消息区域，确保版本信息在顶部显示
         display->SetChatMessage("system", "");
         // Play the success sound to indicate the device is ready
         ResetDecoder();
@@ -689,15 +755,19 @@ void Application::OnClockTimer() {
         // SystemInfo::PrintTaskList();
         SystemInfo::PrintHeapStats();
 
-        // If we have synchronized server time, set the status to clock "HH:MM" if the device is idle
+        // If we have synchronized server time, show time with version info if the device is idle
         if (ota_.HasServerTime()) {
             if (device_state_ == kDeviceStateIdle) {
                 Schedule([this]() {
-                    // Set status to clock "HH:MM"
+                    // Combine time and version info in status bar
                     time_t now = time(NULL);
-                    char time_str[64];
-                    strftime(time_str, sizeof(time_str), "%H:%M  ", localtime(&now));
-                    Board::GetInstance().GetDisplay()->SetStatus(time_str);
+                    char time_str[32];
+                    strftime(time_str, sizeof(time_str), "%H:%M", localtime(&now));
+                    
+                    std::string version_info = std::string(Lang::Strings::VERSION) + ota_.GetCurrentVersion();
+                    std::string combined_status = std::string(time_str) + "  " + version_info;
+                    
+                    Board::GetInstance().GetDisplay()->SetStatus(combined_status.c_str());
                 });
             }
         }
@@ -1065,5 +1135,151 @@ void Application::SetAecMode(AecMode mode) {
         if (protocol_ && protocol_->IsAudioChannelOpened()) {
             protocol_->CloseAudioChannel();
         }
+    });
+}
+
+void Application::TestQRCodeFunction() {
+    ESP_LOGI(TAG, "=== Starting QR Code OTA Interface Test ===");
+    
+    Schedule([this]() {
+        auto display = Board::GetInstance().GetDisplay();
+        display->SetStatus("Testing QR Code");
+        display->SetChatMessage("system", "正在测试OTA服务器二维码获取...");
+        
+        // 测试1: 检查OTA URL配置
+        std::string ota_url = ota_.GetCheckVersionUrl();
+        ESP_LOGI(TAG, "Step 1: OTA Server URL: %s", ota_url.c_str());
+        
+        // 测试2: 检查设备JSON payload
+        auto& board = Board::GetInstance();
+        std::string device_json = board.GetJson();
+        ESP_LOGI(TAG, "Step 2: Device JSON payload length: %d bytes", device_json.length());
+        ESP_LOGI(TAG, "Device JSON (first 300 chars): %.300s", device_json.c_str());
+        
+        // 测试3: 调用CheckVersion获取二维码URL
+        ESP_LOGI(TAG, "Step 3: Calling CheckVersion to get QR code URL from OTA server");
+        display->SetChatMessage("system", "正在连接OTA服务器...");
+        
+        bool version_check = ota_.CheckVersion();
+        ESP_LOGI(TAG, "Step 3 Result: CheckVersion returned %s", version_check ? "SUCCESS" : "FAILED");
+        
+        if (version_check) {
+            // 测试4: 检查是否获取到了QR码URL
+            if (ota_.HasWeChatCodeUrl()) {
+                std::string qr_url = ota_.GetWeChatCodeUrl();
+                ESP_LOGI(TAG, "Step 4: ✅ Got QR code URL: %s", qr_url.c_str());
+                display->SetChatMessage("system", "获取到二维码链接，正在下载图片...");
+                
+                // 测试5: 下载二维码图片
+                ESP_LOGI(TAG, "Step 5: Attempting to download QR code image");
+                bool download_success = ota_.DownloadAndDisplayQRCode();
+                ESP_LOGI(TAG, "Step 5 Result: Download returned %s", download_success ? "SUCCESS" : "FAILED");
+                
+                if (download_success) {
+                    const std::string& image_data = ota_.GetQRImageData();
+                    if (!image_data.empty()) {
+                        ESP_LOGI(TAG, "Step 6: ✅ QR code image downloaded successfully, size: %d bytes", image_data.length());
+                        
+                        // 检查PNG头部
+                        if (image_data.length() >= 8) {
+                            const uint8_t* data = reinterpret_cast<const uint8_t*>(image_data.data());
+                            ESP_LOGI(TAG, "PNG Header: %02X %02X %02X %02X %02X %02X %02X %02X", 
+                                    data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7]);
+                        }
+                        
+                        Alert("测试成功", "OTA服务器二维码获取正常", "happy", Lang::Sounds::P3_SUCCESS);
+                        
+                        // 显示获取到的二维码
+                        if (display->ShowQRCodeImage(reinterpret_cast<const uint8_t*>(image_data.data()), image_data.length())) {
+                            ESP_LOGI(TAG, "Step 7: ✅ QR code displayed successfully");
+                        } else {
+                            ESP_LOGE(TAG, "Step 7: ❌ QR code display failed");
+                        }
+                    } else {
+                        ESP_LOGW(TAG, "Step 6: ⚠️  Download success but no image data");
+                        Alert("测试警告", "下载成功但无图片数据", "neutral", Lang::Sounds::P3_POPUP);
+                    }
+                } else {
+                    ESP_LOGE(TAG, "Step 5: ❌ QR code image download failed");
+                    Alert("下载失败", "二维码图片下载失败", "sad", Lang::Sounds::P3_EXCLAMATION);
+                }
+            } else {
+                ESP_LOGW(TAG, "Step 4: ⚠️  No QR code URL found in OTA response");
+                ESP_LOGW(TAG, "Server response may be missing 'weChat.codeUrl' field");
+                Alert("测试警告", "服务器未返回二维码链接", "neutral", Lang::Sounds::P3_POPUP);
+            }
+        } else {
+            ESP_LOGE(TAG, "Step 3: ❌ CheckVersion failed");
+            ESP_LOGE(TAG, "Possible causes:");
+            ESP_LOGE(TAG, "  - Network connectivity issue");
+            ESP_LOGE(TAG, "  - Server error (HTTP 500 from %s)", ota_url.c_str());
+            ESP_LOGE(TAG, "  - Invalid request format");
+            ESP_LOGE(TAG, "  - Missing required headers");
+            Alert("测试失败", "OTA服务器连接失败", "sad", Lang::Sounds::P3_EXCLAMATION);
+        }
+        
+        ESP_LOGI(TAG, "=== QR Code OTA Interface Test Complete ===");
+    });
+}
+
+void Application::TestOTARequestFormat() {
+    ESP_LOGI(TAG, "=== Testing OTA Request Format ===");
+    
+    Schedule([this]() {
+        auto& board = Board::GetInstance();
+        
+        // 生成完整的设备JSON
+        std::string device_json = board.GetJson();
+        
+        ESP_LOGI(TAG, "Generated Device JSON:");
+        ESP_LOGI(TAG, "Length: %d bytes", device_json.length());
+        ESP_LOGI(TAG, "Content: %s", device_json.c_str());
+        
+        // 验证JSON格式
+        cJSON* json = cJSON_Parse(device_json.c_str());
+        if (json) {
+            ESP_LOGI(TAG, "✅ JSON format is valid");
+            
+            // 检查必要字段
+            cJSON* version = cJSON_GetObjectItem(json, "version");
+            cJSON* uuid = cJSON_GetObjectItem(json, "uuid");
+            cJSON* application = cJSON_GetObjectItem(json, "application");
+            cJSON* board_info = cJSON_GetObjectItem(json, "board");
+            cJSON* ota = cJSON_GetObjectItem(json, "ota");
+            
+            ESP_LOGI(TAG, "Field checks:");
+            ESP_LOGI(TAG, "  version: %s", version ? "✅ Present" : "❌ Missing");
+            ESP_LOGI(TAG, "  uuid: %s", uuid ? "✅ Present" : "❌ Missing");
+            ESP_LOGI(TAG, "  application: %s", application ? "✅ Present" : "❌ Missing");
+            ESP_LOGI(TAG, "  board: %s", board_info ? "✅ Present" : "❌ Missing");
+            ESP_LOGI(TAG, "  ota: %s", ota ? "✅ Present" : "❌ Missing");
+            
+            if (application) {
+                cJSON* name = cJSON_GetObjectItem(application, "name");
+                cJSON* version = cJSON_GetObjectItem(application, "version");
+                cJSON* compile_time = cJSON_GetObjectItem(application, "compile_time");
+                ESP_LOGI(TAG, "  application.name: %s", name && cJSON_IsString(name) ? name->valuestring : "❌ Missing");
+                ESP_LOGI(TAG, "  application.version: %s", version && cJSON_IsString(version) ? version->valuestring : "❌ Missing");
+                ESP_LOGI(TAG, "  application.compile_time: %s", compile_time && cJSON_IsString(compile_time) ? compile_time->valuestring : "❌ Missing");
+            }
+            
+            cJSON_Delete(json);
+        } else {
+            ESP_LOGE(TAG, "❌ JSON format is invalid!");
+            const char* error = cJSON_GetErrorPtr();
+            if (error) {
+                ESP_LOGE(TAG, "JSON Error: %s", error);
+            }
+        }
+        
+        // 显示预期的curl命令格式
+        ESP_LOGI(TAG, "Expected curl command format:");
+        ESP_LOGI(TAG, "curl -X POST \"http://core.device.158box.com/xiaozhi/ota2/\" \\");
+        ESP_LOGI(TAG, "  -H \"Content-Type: application/json\" \\");
+        ESP_LOGI(TAG, "  -H \"Device-Id: %s\" \\", SystemInfo::GetMacAddress().c_str());
+        ESP_LOGI(TAG, "  -H \"Client-Id: %s\" \\", board.GetUuid().c_str());
+        ESP_LOGI(TAG, "  -d '%s'", device_json.c_str());
+        
+        ESP_LOGI(TAG, "=== OTA Request Format Test Complete ===");
     });
 }
