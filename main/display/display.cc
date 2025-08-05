@@ -106,6 +106,7 @@ void Display::UpdateStatusBar(bool update_all) {
             muted_ = false;
             lv_label_set_text(mute_label_, "");
         }
+       // lv_label_set_text(mute_label_, FONT_AWESOME_VOLUME_MUTE);
     }
 
     esp_pm_lock_acquire(pm_lock_);
@@ -127,12 +128,13 @@ void Display::UpdateStatusBar(bool update_all) {
             };
             icon = levels[battery_level / 20];
         }
+
         DisplayLockGuard lock(this);
         if (battery_label_ != nullptr && battery_icon_ != icon) {
             battery_icon_ = icon;
             lv_label_set_text(battery_label_, battery_icon_);
         }
-
+        
         if (low_battery_popup_ != nullptr) {
             if (strcmp(icon, FONT_AWESOME_BATTERY_EMPTY) == 0 && discharging) {
                 if (lv_obj_has_flag(low_battery_popup_, LV_OBJ_FLAG_HIDDEN)) { // 如果低电量提示框隐藏，则显示
@@ -148,7 +150,6 @@ void Display::UpdateStatusBar(bool update_all) {
             }
         }
     }
-
     // 每 10 秒更新一次网络图标
     static int seconds_counter = 0;
     if (update_all || seconds_counter++ % 10 == 0) {
