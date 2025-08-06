@@ -33,6 +33,7 @@ public:
     bool TestQRCodeDownload(const std::string& test_url);  // 测试指定URL的二维码下载
     const std::string& GetQRImageData() const { return qr_image_data_; }  // 获取下载的二维码图片数据
     std::string GetCheckVersionUrl();
+    std::string BuildOtaRequestJson();  // 构建符合OTA接口协议的请求JSON
 
 private:
     std::string activation_message_;

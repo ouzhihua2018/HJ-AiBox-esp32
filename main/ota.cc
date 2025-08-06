@@ -50,6 +50,46 @@ std::string Ota::GetCheckVersionUrl() {
     return url;
 }
 
+std::string Ota::BuildOtaRequestJson() {
+    auto& board = Board::GetInstance();
+    auto app_desc = esp_app_get_description();
+    
+    // 根据OTA接口协议构建请求JSON
+    std::string json = "{";
+    
+    // 基本设备信息
+    json += "\"deviceId\":\"" + SystemInfo::GetMacAddress() + "\",";
+    json += "\"clientId\":\"" + board.GetUuid() + "\",";
+    json += "\"version\":\"" + std::string(app_desc->version) + "\",";
+    json += "\"boardType\":\"" + board.GetBoardType() + "\",";
+    
+    // 硬件信息
+    json += "\"chipModel\":\"" + SystemInfo::GetChipModelName() + "\",";
+    json += "\"flashSize\":" + std::to_string(SystemInfo::GetFlashSize()) + ",";
+    json += "\"freeHeap\":" + std::to_string(SystemInfo::GetMinimumFreeHeapSize()) + ",";
+    
+    // 应用信息
+    json += "\"appName\":\"" + std::string(app_desc->project_name) + "\",";
+    json += "\"compileTime\":\"" + std::string(app_desc->date) + "T" + std::string(app_desc->time) + "Z\",";
+    json += "\"idfVersion\":\"" + std::string(app_desc->idf_ver) + "\",";
+    
+    // 语言和其他配置
+    json += "\"language\":\"" + std::string(Lang::CODE) + "\",";
+    
+    // 如果有序列号，添加序列号
+    if (has_serial_number_) {
+        json += "\"serialNumber\":\"" + serial_number_ + "\",";
+    }
+    
+    // 移除最后的逗号并闭合JSON
+    if (json.back() == ',') {
+        json.pop_back();
+    }
+    json += "}";
+    
+    return json;
+}
+
 Http* Ota::SetupHttp() {
     auto& board = Board::GetInstance();
     auto app_desc = esp_app_get_description();
@@ -92,9 +132,10 @@ bool Ota::CheckVersion() {
 
     auto http = std::unique_ptr<Http>(SetupHttp());
 
-    std::string data = board.GetJson();
-    ESP_LOGI(TAG, "Request JSON length: %d bytes", data.length());
-    ESP_LOGI(TAG, "Request JSON (first 500 chars): %.500s", data.c_str());
+    // 根据OTA接口协议构建请求数据
+    std::string data = BuildOtaRequestJson();
+    ESP_LOGI(TAG, "OTA Request JSON length: %d bytes", data.length());
+    ESP_LOGI(TAG, "OTA Request JSON: %s", data.c_str());
     
     std::string method = data.length() > 0 ? "POST" : "GET";
     http->SetContent(std::move(data));
