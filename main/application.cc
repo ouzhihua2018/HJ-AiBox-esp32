@@ -488,8 +488,46 @@ void Application::Start() {
     // Update the status bar immediately to show the network state
     display->UpdateStatusBar(true);
 
-    // Check for new firmware version or get the MQTT broker address
-    CheckNewVersion();
+    // 新的启动流程：优先获取二维码并检查设备关联状态
+    ESP_LOGI(TAG, "=== New Startup Flow: QR Code First ===");
+    
+    // 第一步：立即尝试获取二维码信息（不进行固件升级检查）
+    if (GetQRCodeInfoOnly()) {
+        ESP_LOGI(TAG, "Successfully got QR code information from server");
+        
+        // 检查设备关联状态
+        if (ota_.HasActivationCode() || ota_.HasActivationChallenge()) {
+            ESP_LOGI(TAG, "Device is not associated, showing QR code for activation");
+            
+            // 设备未关联，设置激活状态并显示二维码
+            SetDeviceState(kDeviceStateActivating);
+            display->SetStatus(Lang::Strings::ACTIVATION);
+            
+            // 显示二维码
+            if (ota_.HasWeChatCodeUrl()) {
+                ShowQRCode();
+            } else {
+                ESP_LOGW(TAG, "No QR code URL available");
+                display->SetChatMessage("system", "二维码获取失败");
+            }
+            
+            // 等待设备关联完成
+            ESP_LOGI(TAG, "Waiting for device association...");
+            WaitForDeviceAssociation();
+            
+        } else {
+            ESP_LOGI(TAG, "Device is already associated, proceeding with normal startup");
+        }
+        
+        // 设备已关联，继续正常的启动流程
+        ESP_LOGI(TAG, "Device associated, checking for firmware updates...");
+        CheckNewVersion();
+        
+    } else {
+        ESP_LOGE(TAG, "Failed to get QR code information, falling back to old startup flow");
+        // 如果无法获取二维码信息，回退到原有流程
+        CheckNewVersion();
+    }
 
     // Initialize the protocol
     display->SetStatus(Lang::Strings::LOADING_PROTOCOL);
@@ -1299,4 +1337,59 @@ void Application::TestOTARequestFormat() {
         
         ESP_LOGI(TAG, "=== OTA Request Format Test Complete ===");
     });
+}
+
+bool Application::GetQRCodeInfoOnly() {
+    ESP_LOGI(TAG, "=== Getting QR Code Info Only ===");
+    return ota_.GetQRCodeInfoOnly();
+}
+
+void Application::WaitForDeviceAssociation() {
+    ESP_LOGI(TAG, "=== Waiting for Device Association ===");
+    
+    const int MAX_WAIT_ITERATIONS = 60;  // 最多等待60次，每次5秒，总共5分钟
+    int wait_count = 0;
+    
+    auto display = Board::GetInstance().GetDisplay();
+    
+    while (wait_count < MAX_WAIT_ITERATIONS) {
+        // 检查设备是否已关联
+        if (!ota_.HasActivationCode() && !ota_.HasActivationChallenge()) {
+            ESP_LOGI(TAG, "✅ Device association completed!");
+            return;
+        }
+        
+        // 每30秒重新获取一次状态
+        if (wait_count % 6 == 0) {
+            ESP_LOGI(TAG, "Checking association status... (%d/%d)", wait_count/6 + 1, MAX_WAIT_ITERATIONS/6);
+            
+            // 重新获取二维码信息以检查关联状态
+            if (ota_.GetQRCodeInfoOnly()) {
+                if (!ota_.HasActivationCode() && !ota_.HasActivationChallenge()) {
+                    ESP_LOGI(TAG, "✅ Device association detected!");
+                    return;
+                }
+            }
+        }
+        
+        // 更新显示状态
+        char status_msg[64];
+        snprintf(status_msg, sizeof(status_msg), "等待扫码关联... %d分钟", (wait_count * 5) / 60 + 1);
+        display->SetStatus(status_msg);
+        
+        // 等待5秒
+        vTaskDelay(pdMS_TO_TICKS(5000));
+        wait_count++;
+        
+        // 检查设备状态，如果不再是激活状态则退出等待
+        if (device_state_ != kDeviceStateActivating) {
+            ESP_LOGI(TAG, "Device state changed, exiting association wait");
+            break;
+        }
+    }
+    
+    if (wait_count >= MAX_WAIT_ITERATIONS) {
+        ESP_LOGW(TAG, "⚠️  Device association wait timeout after %d minutes", MAX_WAIT_ITERATIONS * 5 / 60);
+        display->SetStatus("关联超时，请重启设备");
+    }
 }

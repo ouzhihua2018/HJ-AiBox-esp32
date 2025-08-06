@@ -34,8 +34,14 @@ public:
     const std::string& GetQRImageData() const { return qr_image_data_; }  // 获取下载的二维码图片数据
     std::string GetCheckVersionUrl();
     std::string BuildOtaRequestJson();  // 构建符合OTA接口协议的请求JSON
+    bool GetQRCodeInfoOnly();  // 仅获取二维码和关联信息，不检查固件版本
 
 private:
+    void ParseActivationInfo(cJSON* root);  // 解析激活信息
+    void ParseWeChatQRCode(cJSON* root);    // 解析二维码信息
+    void ParseMqttConfig(cJSON* root);      // 解析MQTT配置
+    void ParseWebSocketConfig(cJSON* root); // 解析WebSocket配置
+    
     std::string activation_message_;
     std::string activation_code_;
     bool has_new_version_ = false;
