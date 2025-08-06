@@ -120,11 +120,18 @@ void TopdEmojiDisplay::SetupGifContainer() {
 }
 
 void TopdEmojiDisplay::SetEmotion(const char* emotion) {
-    if (!emotion || !emotion_gif_) {
+    if (!emotion_gif_) {
         return;
     }
 
     DisplayLockGuard lock(this);
+
+    // 如果传入空字符串或null，隐藏所有表情
+    if (!emotion || strlen(emotion) == 0) {
+        ESP_LOGI(TAG, "隐藏所有表情显示");
+        lv_obj_add_flag(emotion_gif_, LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
 
     // 检查是否正在显示二维码，如果是则不显示表情
     if (qr_img_obj_ != nullptr && !lv_obj_has_flag(qr_img_obj_, LV_OBJ_FLAG_HIDDEN)) {
