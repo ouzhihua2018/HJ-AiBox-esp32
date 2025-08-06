@@ -90,6 +90,72 @@ std::string Ota::BuildOtaRequestJson() {
     return json;
 }
 
+bool Ota::GetQRCodeInfoOnly() {
+    ESP_LOGI(TAG, "=== Getting QR Code Info Only (No Firmware Check) ===");
+    
+    auto& board = Board::GetInstance();
+    std::string url = GetCheckVersionUrl();
+    
+    if (url.length() < 10) {
+        ESP_LOGE(TAG, "Check version URL is not properly set");
+        return false;
+    }
+
+    ESP_LOGI(TAG, "QR Code Info Request URL: %s", url.c_str());
+    
+    auto http = std::unique_ptr<Http>(SetupHttp());
+    std::string data = BuildOtaRequestJson();
+    
+    ESP_LOGI(TAG, "QR Code Info Request JSON: %s", data.c_str());
+    
+    std::string method = data.length() > 0 ? "POST" : "GET";
+    http->SetContent(std::move(data));
+
+    ESP_LOGI(TAG, "Sending %s request for QR code info...", method.c_str());
+    if (!http->Open(method, url)) {
+        ESP_LOGE(TAG, "Failed to open HTTP connection to %s", url.c_str());
+        return false;
+    }
+
+    auto status_code = http->GetStatusCode();
+    ESP_LOGI(TAG, "QR Code Info server response status: %d", status_code);
+    
+    if (status_code != 200) {
+        ESP_LOGE(TAG, "Failed to get QR code info, status code: %d", status_code);
+        std::string error_response = http->ReadAll();
+        ESP_LOGE(TAG, "Error response: %s", error_response.c_str());
+        http->Close();
+        return false;
+    }
+
+    std::string response_data = http->ReadAll();
+    http->Close();
+
+    ESP_LOGI(TAG, "QR Code Info Response: %s", response_data.c_str());
+
+    // 解析响应，但只关注二维码和激活信息，忽略固件版本
+    cJSON *root = cJSON_Parse(response_data.c_str());
+    if (root == nullptr) {
+        ESP_LOGE(TAG, "Failed to parse QR code info response JSON");
+        return false;
+    }
+
+    // 解析激活相关信息
+    ParseActivationInfo(root);
+    
+    // 解析二维码信息
+    ParseWeChatQRCode(root);
+    
+    // 解析MQTT和WebSocket配置（如果有的话）
+    ParseMqttConfig(root);
+    ParseWebSocketConfig(root);
+
+    cJSON_Delete(root);
+    
+    ESP_LOGI(TAG, "✅ QR Code Info retrieved successfully");
+    return true;
+}
+
 Http* Ota::SetupHttp() {
     auto& board = Board::GetInstance();
     auto app_desc = esp_app_get_description();
@@ -672,6 +738,100 @@ bool Ota::TestQRCodeDownload(const std::string& test_url) {
     
     ESP_LOGI(TAG, "QR code test %s", result ? "SUCCESS" : "FAILED");
     return result;
+}
+
+void Ota::ParseActivationInfo(cJSON* root) {
+    has_activation_code_ = false;
+    has_activation_challenge_ = false;
+    cJSON *activation = cJSON_GetObjectItem(root, "activation");
+    if (cJSON_IsObject(activation)) {
+        cJSON* message = cJSON_GetObjectItem(activation, "message");
+        if (cJSON_IsString(message)) {
+            activation_message_ = message->valuestring;
+        }
+        cJSON* code = cJSON_GetObjectItem(activation, "code");
+        if (cJSON_IsString(code)) {
+            activation_code_ = code->valuestring;
+            has_activation_code_ = true;
+        }
+        cJSON* challenge = cJSON_GetObjectItem(activation, "challenge");
+        if (cJSON_IsString(challenge)) {
+            activation_challenge_ = challenge->valuestring;
+            has_activation_challenge_ = true;
+        }
+        cJSON* timeout_ms = cJSON_GetObjectItem(activation, "timeout_ms");
+        if (cJSON_IsNumber(timeout_ms)) {
+            activation_timeout_ms_ = timeout_ms->valueint;
+        }
+    }
+}
+
+void Ota::ParseWeChatQRCode(cJSON* root) {
+    ESP_LOGI(TAG, "=== Parsing WeChat QR Code URL ===");
+    cJSON *wechat = cJSON_GetObjectItem(root, "weChat");
+    if (cJSON_IsObject(wechat)) {
+        ESP_LOGI(TAG, "✅ Found weChat section in response");
+        cJSON *codeUrl = cJSON_GetObjectItem(wechat, "codeUrl");
+        if (cJSON_IsString(codeUrl) && codeUrl->valuestring != nullptr) {
+            wechat_code_url_ = codeUrl->valuestring;
+            if (!wechat_code_url_.empty()) {
+                ESP_LOGI(TAG, "✅ Got WeChat QR code URL: %s", wechat_code_url_.c_str());
+                ESP_LOGI(TAG, "QR code URL length: %d characters", wechat_code_url_.length());
+                
+                // 验证URL格式
+                if (wechat_code_url_.find("http") == 0 && wechat_code_url_.find(".png") != std::string::npos) {
+                    ESP_LOGI(TAG, "✅ QR code URL format validation passed");
+                } else {
+                    ESP_LOGW(TAG, "⚠️  QR code URL format may be invalid");
+                }
+            } else {
+                ESP_LOGW(TAG, "⚠️  QR code URL is empty string");
+                wechat_code_url_.clear();
+            }
+        } else {
+            ESP_LOGW(TAG, "⚠️  codeUrl field is not a valid string or is null");
+        }
+    } else {
+        ESP_LOGI(TAG, "❌ No weChat section found in response");
+    }
+}
+
+void Ota::ParseMqttConfig(cJSON* root) {
+    has_mqtt_config_ = false;
+    cJSON *mqtt = cJSON_GetObjectItem(root, "mqtt");
+    if (cJSON_IsObject(mqtt)) {
+        Settings settings("mqtt", true);
+        cJSON *item = NULL;
+        cJSON_ArrayForEach(item, mqtt) {
+            if (cJSON_IsString(item)) {
+                if (settings.GetString(item->string) != item->valuestring) {
+                    settings.SetString(item->string, item->valuestring);
+                }
+            }
+        }
+        has_mqtt_config_ = true;
+    } else {
+        ESP_LOGI(TAG, "No mqtt section found");
+    }
+}
+
+void Ota::ParseWebSocketConfig(cJSON* root) {
+    has_websocket_config_ = false;
+    cJSON *websocket = cJSON_GetObjectItem(root, "websocket");
+    if (cJSON_IsObject(websocket)) {
+        Settings settings("websocket", true);
+        cJSON *item = NULL;
+        cJSON_ArrayForEach(item, websocket) {
+            if (cJSON_IsString(item)) {
+                settings.SetString(item->string, item->valuestring);
+            } else if (cJSON_IsNumber(item)) {
+                settings.SetInt(item->string, item->valueint);
+            }
+        }
+        has_websocket_config_ = true;
+    } else {
+        ESP_LOGI(TAG, "No websocket section found");
+    }
 }
 
 

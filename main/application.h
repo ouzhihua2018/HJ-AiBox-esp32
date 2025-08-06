@@ -83,6 +83,10 @@ public:
     // 测试二维码功能
     void TestQRCodeFunction();
     void TestOTARequestFormat();
+    
+    // 新的启动流程方法
+    bool GetQRCodeInfoOnly();  // 仅获取二维码信息，不进行固件升级检查
+    void WaitForDeviceAssociation();  // 等待设备关联完成
 
 private:
     Application();
