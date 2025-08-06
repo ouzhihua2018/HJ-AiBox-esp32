@@ -734,7 +734,8 @@ void Application::Start() {
         SetDeviceState(kDeviceStateIdle);
         
         if (protocol_started) {
-            std::string message = std::string(Lang::Strings::VERSION) + ota_.GetCurrentVersion();
+            // 只显示版本号，不显示"版本"字样，覆盖时间显示位置
+            std::string message = ota_.GetCurrentVersion();
             // 将版本信息显示在屏幕顶部居中位置
             display->SetStatus(message.c_str());
             // 清除聊天消息区域，确保版本信息在顶部显示
@@ -766,19 +767,16 @@ void Application::OnClockTimer() {
         // SystemInfo::PrintTaskList();
         SystemInfo::PrintHeapStats();
 
-        // If we have synchronized server time, show time with version info if the device is idle
+        // If we have synchronized server time, show time centered if the device is idle
         if (ota_.HasServerTime()) {
             if (device_state_ == kDeviceStateIdle) {
                 Schedule([this]() {
-                    // Combine time and version info in status bar
+                    // Show only time, centered in status bar
                     time_t now = time(NULL);
                     char time_str[32];
                     strftime(time_str, sizeof(time_str), "%H:%M", localtime(&now));
                     
-                    std::string version_info = std::string(Lang::Strings::VERSION) + ota_.GetCurrentVersion();
-                    std::string combined_status = std::string(time_str) + "  " + version_info;
-                    
-                    Board::GetInstance().GetDisplay()->SetStatus(combined_status.c_str());
+                    Board::GetInstance().GetDisplay()->SetStatus(time_str);
                 });
             }
         }

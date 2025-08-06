@@ -10,6 +10,7 @@
 #include "led/single_led.h"
 #include "assets/lang_config.h"
 #include "power_manager.h"
+#include "ota.h"
 
 #include <esp_log.h>
 #include <esp_lcd_panel_vendor.h>
@@ -283,6 +284,47 @@ private:
         thing_manager.AddThing(iot::CreateThing("Battery"));
     }
 
+    // 升级确认结束后检查激活状态并显示二维码
+    void CheckActivationStatusAndShowQR() {
+        ESP_LOGI(TAG, "Checking device activation status after upgrade confirmation");
+        
+        // 获取Application实例来检查设备激活状态
+        auto& app = Application::GetInstance();
+        
+        // 检查OTA实例获取激活状态
+        if (ota_.HasActivationCode() || ota_.HasActivationChallenge()) {
+            ESP_LOGI(TAG, "Device is not activated, showing QR code for activation");
+            
+            // 设置设备状态为激活中
+            app.SetDeviceState(kDeviceStateActivating);
+            
+            // 关闭所有表情显示，确保二维码清晰显示
+            if (display_) {
+                ESP_LOGI(TAG, "Hiding all emotions to show QR code clearly");
+                // 通过设置空字符串来隐藏表情，这会在TopdEmojiDisplay中被处理
+                display_->SetEmotion("");
+                display_->SetStatus("请扫码激活设备");
+                
+                // 显示二维码（如果有可用的URL）
+                if (ota_.HasWeChatCodeUrl()) {
+                    std::string qr_url = ota_.GetWeChatCodeUrl();
+                    ESP_LOGI(TAG, "Displaying QR code from URL: %s", qr_url.c_str());
+                    display_->ShowQRCode(qr_url);
+                } else {
+                    ESP_LOGW(TAG, "No QR code URL available, showing placeholder");
+                    display_->SetChatMessage("system", "二维码获取失败，请检查网络");
+                }
+            }
+        } else {
+            ESP_LOGI(TAG, "Device is already activated, proceeding with normal operation");
+            // 设备已激活，恢复正常显示
+            if (display_) {
+                display_->SetEmotion("neutral");
+                display_->SetStatus("待命");
+            }
+        }
+    }
+
 public:
     TOPD_1_54TFT_ML307_00
 () :
@@ -343,6 +385,12 @@ public:
             power_save_timer_->WakeUp();
         }
         DualNetworkBoard::SetPowerSaveMode(enabled);
+    }
+
+    // 公共方法：升级确认结束后调用，检查激活状态并显示二维码
+    void PostUpgradeActivationCheck() {
+        ESP_LOGI(TAG, "Post-upgrade activation check called");
+        CheckActivationStatusAndShowQR();
     }
 };
 
