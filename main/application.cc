@@ -727,17 +727,24 @@ void Application::Start() {
 
     // Wait for the new version check to finish
     xEventGroupWaitBits(event_group_, CHECK_NEW_VERSION_DONE_EVENT, pdTRUE, pdFALSE, portMAX_DELAY);
-    SetDeviceState(kDeviceStateIdle);
-
-    if (protocol_started) {
-        std::string message = std::string(Lang::Strings::VERSION) + ota_.GetCurrentVersion();
-        // 将版本信息显示在屏幕顶部居中位置
-        display->SetStatus(message.c_str());
-        // 清除聊天消息区域，确保版本信息在顶部显示
-        display->SetChatMessage("system", "");
-        // Play the success sound to indicate the device is ready
-        ResetDecoder();
-        PlaySound(Lang::Sounds::P3_SUCCESS);
+    
+    // 只有在非激活状态下才设置为idle状态
+    // 如果设备正在激活中（显示二维码），则保持当前状态
+    if (device_state_ != kDeviceStateActivating) {
+        SetDeviceState(kDeviceStateIdle);
+        
+        if (protocol_started) {
+            std::string message = std::string(Lang::Strings::VERSION) + ota_.GetCurrentVersion();
+            // 将版本信息显示在屏幕顶部居中位置
+            display->SetStatus(message.c_str());
+            // 清除聊天消息区域，确保版本信息在顶部显示
+            display->SetChatMessage("system", "");
+            // Play the success sound to indicate the device is ready
+            ResetDecoder();
+            PlaySound(Lang::Sounds::P3_SUCCESS);
+        }
+    } else {
+        ESP_LOGI(TAG, "Device is in activation state, keeping QR code display active");
     }
 
     // Print heap stats
