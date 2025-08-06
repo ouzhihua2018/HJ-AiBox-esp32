@@ -7,6 +7,9 @@
 #include <esp_err.h>
 #include "board.h"
 
+// 前向声明
+struct cJSON;
+
 class Ota {
 public:
     Ota();

@@ -84,7 +84,16 @@ public:
     void TestQRCodeFunction();
     void TestOTARequestFormat();
     
-    // 新的启动流程方法
+    // 五步开机流程方法
+    bool InitializeNetworkConnection();     // 第一步：网络连接初始化
+    bool CheckDeviceRegistrationStatus();   // 第二步：检查设备注册状态
+    bool IsDeviceRegistered();              // 判断设备是否已注册
+    bool GetQRCodeDownloadUrl();            // 第三步：获取QR码下载URL
+    bool DownloadAndProcessQRCode();        // 第四步：下载并处理QR码图片
+    void DisplayQRCodeOnTFT();              // 第五步：在TFT屏显示QR码
+    void WaitForDeviceRegistration();       // 等待设备注册完成
+    
+    // 原有方法保留（向后兼容）
     bool GetQRCodeInfoOnly();  // 仅获取二维码信息，不进行固件升级检查
     void WaitForDeviceAssociation();  // 等待设备关联完成
 

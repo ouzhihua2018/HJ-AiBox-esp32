@@ -93,7 +93,6 @@ std::string Ota::BuildOtaRequestJson() {
 bool Ota::GetQRCodeInfoOnly() {
     ESP_LOGI(TAG, "=== Getting QR Code Info Only (No Firmware Check) ===");
     
-    auto& board = Board::GetInstance();
     std::string url = GetCheckVersionUrl();
     
     if (url.length() < 10) {
