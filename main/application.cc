@@ -243,9 +243,10 @@ void Application::ShowQRCode() {
                 display->SetStatus("");
                 display->SetChatMessage("system", "");
                 
-                // 不播放任何音效，保持静默
-                // 不调用SetEmotion，让DisplayQRImage方法处理所有UI隐藏
-                ESP_LOGI(TAG, "QR code display completed, screen shows only QR code with white background");
+                // 播放二维码显示成功的提示音
+                ResetDecoder();
+                PlaySound(Lang::Sounds::P3_SUCCESS);
+                ESP_LOGI(TAG, "QR code display completed with audio notification");
                 
                 return;
             }
@@ -269,6 +270,9 @@ void Application::HandleDeviceActivationAndQRCode() {
     // 检查是否有激活码或激活挑战（表示设备未关联）
     if (ota_.HasActivationCode() || ota_.HasActivationChallenge()) {
         ESP_LOGI(TAG, "Device is not associated, showing QR code for activation");
+        
+        // 设置设备状态为激活中，避免后续被覆盖
+        SetDeviceState(kDeviceStateActivating);
         display->SetStatus(Lang::Strings::ACTIVATION);
         
         // 设备未关联，显示二维码
@@ -1022,6 +1026,11 @@ void Application::SetDeviceState(DeviceState state) {
 #endif
             }
             ResetDecoder();
+            break;
+        case kDeviceStateActivating:
+            // 在激活状态下，不设置表情，保持二维码显示
+            // 状态信息已在HandleDeviceActivationAndQRCode中设置
+            ESP_LOGI(TAG, "Device in activation state, keeping QR code display");
             break;
         default:
             // Do nothing
