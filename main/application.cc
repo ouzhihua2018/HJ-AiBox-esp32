@@ -728,9 +728,14 @@ void Application::Start() {
     // Wait for the new version check to finish
     xEventGroupWaitBits(event_group_, CHECK_NEW_VERSION_DONE_EVENT, pdTRUE, pdFALSE, portMAX_DELAY);
     
-    // 只有在非激活状态下才设置为idle状态
-    // 如果设备正在激活中（显示二维码），则保持当前状态
-    if (device_state_ != kDeviceStateActivating) {
+    // 检查设备激活状态，决定后续显示逻辑
+    if (ota_.HasActivationCode() || ota_.HasActivationChallenge()) {
+        // 设备未激活，保持激活状态，不设置为idle（避免显示neutral表情）
+        ESP_LOGI(TAG, "Device is not activated, keeping activation state for QR code display");
+        // 激活状态已在HandleDeviceActivationAndQRCode中设置
+    } else {
+        // 设备已激活，可以正常进入idle状态
+        ESP_LOGI(TAG, "Device is activated, entering idle state");
         SetDeviceState(kDeviceStateIdle);
         
         if (protocol_started) {
@@ -744,8 +749,6 @@ void Application::Start() {
             ResetDecoder();
             PlaySound(Lang::Sounds::P3_SUCCESS);
         }
-    } else {
-        ESP_LOGI(TAG, "Device is in activation state, keeping QR code display active");
     }
 
     // Print heap stats
