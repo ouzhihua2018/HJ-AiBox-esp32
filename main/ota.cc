@@ -45,7 +45,7 @@ std::string Ota::GetCheckVersionUrl() {
     std::string url = settings.GetString("ota_url");
     if (url.empty()) {
         // 使用指定的服务器地址
-        url = "http://core.device.158box.com/xiaozhi/ota2/";
+        url = "http://8.142.109.195:30301/xiaozhi/ota2/";
     }
     return url;
 }
@@ -92,7 +92,7 @@ std::string Ota::BuildOtaRequestJson() {
 
 bool Ota::GetQRCodeInfoOnly() {
     ESP_LOGI(TAG, "=== Getting QR Code Info Only (No Firmware Check) ===");
-    
+    auto& board = Board::GetInstance();
     std::string url = GetCheckVersionUrl();
     
     if (url.length() < 10) {
@@ -103,8 +103,8 @@ bool Ota::GetQRCodeInfoOnly() {
     ESP_LOGI(TAG, "QR Code Info Request URL: %s", url.c_str());
     
     auto http = std::unique_ptr<Http>(SetupHttp());
-    std::string data = BuildOtaRequestJson();
-    
+   // std::string data = BuildOtaRequestJson();
+    std::string data = board.GetJson();
     ESP_LOGI(TAG, "QR Code Info Request JSON: %s", data.c_str());
     
     std::string method = data.length() > 0 ? "POST" : "GET";
@@ -130,8 +130,8 @@ bool Ota::GetQRCodeInfoOnly() {
     std::string response_data = http->ReadAll();
     http->Close();
 
-    ESP_LOGI(TAG, "QR Code Info Response: %s", response_data.c_str());
-
+    ESP_LOGI(TAG, "QR Code Info Response: %s", response_data.c_str()[0]);
+  
     // 解析响应，但只关注二维码和激活信息，忽略固件版本
     cJSON *root = cJSON_Parse(response_data.c_str());
     if (root == nullptr) {
@@ -198,7 +198,7 @@ bool Ota::CheckVersion() {
     auto http = std::unique_ptr<Http>(SetupHttp());
 
     // 根据OTA接口协议构建请求数据
-    std::string data = BuildOtaRequestJson();
+    std::string data = BuildOtaRequestJson(); 
     ESP_LOGI(TAG, "OTA Request JSON length: %d bytes", data.length());
     ESP_LOGI(TAG, "OTA Request JSON: %s", data.c_str());
     
