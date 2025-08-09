@@ -130,7 +130,7 @@ bool Ota::GetQRCodeInfoOnly() {
     std::string response_data = http->ReadAll();
     http->Close();
 
-    ESP_LOGI(TAG, "QR Code Info Response: %s", response_data.c_str()[0]);
+    ESP_LOGI(TAG, "QR Code Info Response: %s", response_data.c_str());
   
     // 解析响应，但只关注二维码和激活信息，忽略固件版本
     cJSON *root = cJSON_Parse(response_data.c_str());
