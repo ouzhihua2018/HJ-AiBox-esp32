@@ -10,9 +10,7 @@
 #include "iot/thing_manager.h"
 #include "assets/lang_config.h"
 #include "mcp_server.h"
-#include "boards/common/dual_network_board.h"
-#include "boards/common/wifi_board.h"
-#include "wifi_station.h"
+
 
 #if CONFIG_USE_AUDIO_PROCESSOR
 #include "afe_audio_processor.h"
@@ -169,26 +167,52 @@ void Application::CheckNewVersion() {
             });
 
             // If upgrade success, the device will reboot and never reach here
-            // 升级失败，保持原有提示词，然后检查设备关联状态
             display->SetStatus(Lang::Strings::UPGRADE_FAILED);
-            ESP_LOGI(TAG, "Firmware upgrade failed, checking device association status...");
+            ESP_LOGI(TAG, "Firmware upgrade failed...");
             vTaskDelay(pdMS_TO_TICKS(3000));
-            
-            // 升级失败后，检查设备关联状态决定后续行为
-            HandleDeviceActivationAndQRCode();
-            
-            xEventGroupSetBits(event_group_, CHECK_NEW_VERSION_DONE_EVENT);
+            Reboot();
             return;
         }
 
-        // No new version, mark the current version as valid
+        // 无新版本：标记当前版本有效
         ota_.MarkCurrentVersionValid();
-        
-        // 检查设备关联状态和二维码显示逻辑
-        HandleDeviceActivationAndQRCode();
-        
-        xEventGroupSetBits(event_group_, CHECK_NEW_VERSION_DONE_EVENT);
-        break;
+
+        // 若无需激活，结束版本检查
+        if (!ota_.HasActivationCode() && !ota_.HasActivationChallenge()) {
+            xEventGroupSetBits(event_group_, CHECK_NEW_VERSION_DONE_EVENT);
+            break;
+        }
+
+        // 需要激活：显示二维码并轮询激活
+        display->SetStatus(Lang::Strings::ACTIVATION);
+        if (ota_.HasWeChatCodeUrl()) {
+            ShowQRCode();
+        } else {
+            ESP_LOGW(TAG, "No QR code URL available for activation");
+            display->SetChatMessage("system", "QR Code Not Available");
+        }
+
+        for (int i = 0; i < 10; ++i) {
+            ESP_LOGI(TAG, "Activating... %d/%d", i + 1, 10);
+            esp_err_t err = ota_.Activate();
+            if (err == ESP_OK) {
+                xEventGroupSetBits(event_group_, CHECK_NEW_VERSION_DONE_EVENT);
+                break;
+            } else if (err == ESP_ERR_TIMEOUT) {
+                vTaskDelay(pdMS_TO_TICKS(3000));
+            } else {
+                vTaskDelay(pdMS_TO_TICKS(10000));
+            }
+            if (device_state_ == kDeviceStateIdle) {
+                break;
+            }
+        }
+
+        // 激活后再检查一次
+        if (!ota_.HasActivationCode() && !ota_.HasActivationChallenge()) {
+            xEventGroupSetBits(event_group_, CHECK_NEW_VERSION_DONE_EVENT);
+            break;
+        }
     }
 }
 
@@ -485,63 +509,14 @@ void Application::Start() {
     /* Start the clock timer to update the status bar */
     esp_timer_start_periodic(clock_timer_handle_, 1000000);
 
-    // 按照用户要求的五步开机流程
-    ESP_LOGI(TAG, "=== 开机流程开始 ===");
-    
-    // 第一步：确定网络状态
-    ESP_LOGI(TAG, "第一步：确定网络状态");
-    if (!InitializeNetworkConnection()) {
-        ESP_LOGE(TAG, "网络初始化失败，无法继续");
-        display->SetChatMessage("system", "网络连接失败");
-        return;
-    }
+    /* Wait for the network to be ready (align with application_Test.cc) */
+    board.StartNetwork();
     
     // Update the status bar immediately to show the network state
     display->UpdateStatusBar(true);
     
-    // 第二步：检查设备注册状态
-    ESP_LOGI(TAG, "第二步：检查设备注册状态");
-    if (!CheckDeviceRegistrationStatus()) {
-        ESP_LOGE(TAG, "无法检查设备注册状态");
-        display->SetChatMessage("system", "设备状态检查失败");
-        return;
-    }
-    
-    // 如果设备已注册，直接跳转到固件版本确认
-    if (IsDeviceRegistered()) {
-        ESP_LOGI(TAG, "设备已注册，跳转到固件版本确认");
-        CheckNewVersion();
-    } else {
-        ESP_LOGI(TAG, "设备未注册，开始QR码注册流程");
-        
-        // 第三步：获取QR码下载URL
-        ESP_LOGI(TAG, "第三步：通过POST请求获取QR码URL");
-        if (!GetQRCodeDownloadUrl()) {
-            ESP_LOGE(TAG, "获取QR码URL失败");
-            display->SetChatMessage("system", "二维码获取失败");
-            return;
-        }
-        
-        // 第四步：下载QR码图片并转换格式
-        ESP_LOGI(TAG, "第四步：下载QR码图片并转换格式");
-        if (!DownloadAndProcessQRCode()) {
-            ESP_LOGE(TAG, "QR码图片下载或处理失败");
-            display->SetChatMessage("system", "二维码图片处理失败");
-            return;
-        }
-        
-        // 第五步：在TFT屏显示QR码
-        ESP_LOGI(TAG, "第五步：在TFT屏显示QR码");
-        DisplayQRCodeOnTFT();
-        
-        // 等待设备注册完成
-        ESP_LOGI(TAG, "等待设备注册完成...");
-        WaitForDeviceRegistration();
-        
-        // 注册完成后检查固件版本
-        ESP_LOGI(TAG, "设备注册完成，检查固件版本");
-        CheckNewVersion();
-    }
+    // Check for new firmware version or get the MQTT/Websocket address
+    CheckNewVersion();
 
     // Initialize the protocol
     display->SetStatus(Lang::Strings::LOADING_PROTOCOL);
@@ -791,11 +766,9 @@ void Application::Start() {
         SetDeviceState(kDeviceStateIdle);
         
         if (protocol_started) {
-            // 只显示版本号，不显示"版本"字样，覆盖时间显示位置
+            // 设备已绑定，恢复正常 UI
             std::string message = ota_.GetCurrentVersion();
-            // 将版本信息显示在屏幕顶部居中位置
             display->SetStatus(message.c_str());
-            // 清除聊天消息区域，确保版本信息在顶部显示
             display->SetChatMessage("system", "");
             // Play the success sound to indicate the device is ready
             ResetDecoder();
@@ -1411,58 +1384,10 @@ void Application::WaitForDeviceAssociation() {
 // === 五步开机流程实现 ===
 
 bool Application::InitializeNetworkConnection() {
-    ESP_LOGI(TAG, "初始化网络连接");
-    
-    auto& board = Board::GetInstance();
-    
-    // 检查板卡类型并启动网络（避免使用dynamic_cast）
-    std::string board_type = board.GetBoardType();
-    ESP_LOGI(TAG, "检测到板卡类型: %s", board_type.c_str());
-    
-    if (board_type == "topd-1.54tft-ml307-00") {
-        ESP_LOGI(TAG, "检测到307ML网络板卡，直接启动网络");
-        board.StartNetwork();
-        return true;
-    } else {
-        ESP_LOGI(TAG, "检测到WiFi网络板卡，检查连接状态");
-        
-        // 检查WiFi是否已配置并连接
-        if (!WifiStation::GetInstance().IsConnected()) {
-            ESP_LOGI(TAG, "WiFi未连接，启动配置模式");
-            auto display = board.GetDisplay();
-            display->SetStatus("请连接WiFi");
-            display->SetChatMessage("system", "请使用手机连接设备热点进行WiFi配置");
-            
-            // 启动WiFi配置模式 - 使用公共接口
-            ESP_LOGI(TAG, "启动WiFi配置模式...");
-            // 注意：这里需要通过公共方法启动WiFi配置
-            // 暂时直接启动网络，WiFi配置由其他机制处理
-            board.StartNetwork();
-            
-            // 等待WiFi连接完成（最多等待2分钟）
-            int wait_count = 0;
-            while (!WifiStation::GetInstance().IsConnected() && wait_count < 120) {
-                vTaskDelay(pdMS_TO_TICKS(1000));
-                wait_count++;
-                
-                if (wait_count % 10 == 0) {
-                    ESP_LOGI(TAG, "等待WiFi连接... %d/120秒", wait_count);
-                }
-            }
-            
-            if (!WifiStation::GetInstance().IsConnected()) {
-                ESP_LOGE(TAG, "WiFi连接超时");
-                return false;
-            }
-        } else {
-            ESP_LOGI(TAG, "WiFi已连接，启动网络服务");
-            board.StartNetwork();
-        }
-        
-        return true;
-    }
-    
-    return false;
+    // 简化：主程序不关心具体联网细节，全部交由板级（Board::StartNetwork）处理
+    ESP_LOGI(TAG, "初始化网络连接（由Board负责）");
+    Board::GetInstance().StartNetwork();
+    return true;
 }
 
 bool Application::CheckDeviceRegistrationStatus() {
