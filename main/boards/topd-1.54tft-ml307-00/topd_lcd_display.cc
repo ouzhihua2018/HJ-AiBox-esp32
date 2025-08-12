@@ -64,6 +64,7 @@ TopdEmojiDisplay::TopdEmojiDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_p
                     fonts),
       emotion_gif_(nullptr) {
     SetupGifContainer();
+    InitQrImage();
 };
 
 void TopdEmojiDisplay::SetupGifContainer() {
@@ -89,14 +90,21 @@ void TopdEmojiDisplay::SetupGifContainer() {
     lv_obj_center(content_);
 
     emotion_label_ = lv_label_create(content_);
+    lv_obj_set_size(emotion_label_, 0, 0);
     lv_label_set_text(emotion_label_, "");
     lv_obj_set_width(emotion_label_, 0);
     lv_obj_set_style_border_width(emotion_label_, 0, 0);
     lv_obj_add_flag(emotion_label_, LV_OBJ_FLAG_HIDDEN);
 
+    preview_image_ = lv_image_create(content_);
+    lv_obj_set_size(preview_image_, width_ * 0.9, height_ * 0.9);
+    ESP_LOGI(TAG,"preview_image size: %.2f, %.2f",width_ * 0.8,height_ * 0.8);
+    lv_obj_align(preview_image_, LV_ALIGN_CENTER, 0, 0);    
+    //lv_obj_add_flag(preview_image_, LV_OBJ_FLAG_HIDDEN);
+    
     emotion_gif_ = lv_gif_create(content_);
     int gif_size = LV_HOR_RES;
-    lv_obj_set_size(emotion_gif_, gif_size, gif_size);
+    lv_obj_set_size(emotion_gif_, 0, 0);
     lv_obj_set_style_border_width(emotion_gif_, 0, 0);
     lv_obj_set_style_bg_opa(emotion_gif_, LV_OPA_TRANSP, 0);
     lv_obj_center(emotion_gif_);
@@ -106,13 +114,14 @@ void TopdEmojiDisplay::SetupGifContainer() {
     lv_gif_set_src(emotion_gif_, &staticstate);
 
     chat_message_label_ = lv_label_create(content_);
+    lv_obj_set_size(chat_message_label_, 0, 0);
     lv_label_set_text(chat_message_label_, "");
     lv_obj_set_width(chat_message_label_, LV_HOR_RES * 0.9);
     lv_label_set_long_mode(chat_message_label_, LV_LABEL_LONG_SCROLL_CIRCULAR);
     lv_obj_set_style_text_align(chat_message_label_, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_color(chat_message_label_, lv_color_white(), 0);
     lv_obj_set_style_border_width(chat_message_label_, 0, 0);
-
+    lv_obj_add_flag(chat_message_label_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_set_style_bg_opa(chat_message_label_, LV_OPA_70, 0);
     lv_obj_set_style_bg_color(chat_message_label_, lv_color_black(), 0);
     lv_obj_set_style_pad_ver(chat_message_label_, 5, 0);
@@ -120,6 +129,15 @@ void TopdEmojiDisplay::SetupGifContainer() {
     lv_obj_align(chat_message_label_, LV_ALIGN_BOTTOM_MID, 0, 0);
 
     LcdDisplay::SetTheme("dark");
+}
+/// @brief init Qrimage desc，used for show in preview_image_
+void TopdEmojiDisplay::InitQrImage()
+{   
+    ESP_LOGI(TAG,"Init QrImage");
+    memset(&Qr_image_, 0, sizeof(Qr_image_));
+    Qr_image_.header.cf = LV_COLOR_FORMAT_RAW ;
+    Qr_image_.header.w = 160;
+    Qr_image_.header.h = 160;
 }
 
 void TopdEmojiDisplay::SetEmotion(const char* emotion) {

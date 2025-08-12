@@ -92,13 +92,14 @@ public:
     virtual void HideQRCode();
     // 新增：测试指定的二维码URL
     virtual void TestQRCodeUrl();
-
+   
 private:
     // QR码显示相关方法
     void ShowQRError();
     void DisplayQRImage(const std::vector<uint8_t>& image_data);
     void SetupGifContainer();
-
+    void InitQrImage();
+    
     lv_obj_t* emotion_gif_;  ///< GIF表情组件 >
     lv_obj_t* qr_container_ = nullptr;  ///< 二维码显示容器
     lv_obj_t* qr_img_obj_ = nullptr;    ///< 二维码图片对象

@@ -34,7 +34,7 @@ public:
     bool HasWeChatCodeUrl() const { return !wechat_code_url_.empty(); }  // 检查是否有二维码链接
     bool DownloadAndDisplayQRCode();  // 下载并显示二维码
     bool TestQRCodeDownload(const std::string& test_url);  // 测试指定URL的二维码下载
-    const std::string& GetQRImageData() const { return qr_image_data_; }  // 获取下载的二维码图片数据
+    std::string  GetQRImageData() const { return qr_image_data_; }  // 获取下载的二维码图片数据
     std::string GetCheckVersionUrl();
     std::string BuildOtaRequestJson();  // 构建符合OTA接口协议的请求JSON
     bool GetQRCodeInfoOnly();  // 仅获取二维码和关联信息，不检查固件版本
@@ -59,8 +59,8 @@ private:
     std::string firmware_url_;
     std::string activation_challenge_;
     std::string serial_number_;
-    std::string wechat_code_url_; // 用于存储二维码链接
-    std::string qr_image_data_;   // 用于存储下载的二维码图片数据
+    std::string wechat_code_url_ = "http://8.142.109.195:30302/qrcode/927692b047a6f7-338f-4b57-a8c0-3f959e651126.png"; // 用于存储二维码链接
+    std::string  qr_image_data_;   // 用于存储下载的二维码图片数据
     int activation_timeout_ms_ = 30000;
 
     void Upgrade(const std::string& firmware_url);
