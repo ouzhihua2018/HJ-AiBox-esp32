@@ -627,7 +627,7 @@ esp_err_t Ota::Activate() {
 }
 
 bool Ota::DownloadAndDisplayQRCode() {
-    ESP_LOGI(TAG, "=== Starting QR Code Download ===");
+    ESP_LOGI(TAG, "========== Starting QR Code Download ============+=");
     
     if (wechat_code_url_.empty()) {
         ESP_LOGE(TAG, "❌ QR code URL is empty, make sure CheckVersion() was called first");
@@ -644,8 +644,8 @@ bool Ota::DownloadAndDisplayQRCode() {
     }
 
     auto& board = Board::GetInstance();
-    auto http = std::unique_ptr<Http>(board.CreateHttp());
-
+    
+    auto http = SetupHttp();  //init httpclient,set http header 
     // 设置下载图片的请求头
     http->SetHeader("User-Agent", "ESP32-QRCode-Downloader/1.0");
     http->SetHeader("Accept", "image/png,image/*,*/*");
@@ -687,23 +687,6 @@ bool Ota::DownloadAndDisplayQRCode() {
     ESP_LOGI(TAG, "✅ QR code image downloaded successfully");
     ESP_LOGI(TAG, "Image size: %d bytes", image_data.length());
 
-    // 验证PNG头部
-    if (image_data.length() >= 8) {
-        const uint8_t* data = reinterpret_cast<const uint8_t*>(image_data.data());
-        // PNG文件头：89 50 4E 47 0D 0A 1A 0A
-        if (data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47) {
-            ESP_LOGI(TAG, "✅ PNG header validation passed");
-            ESP_LOGI(TAG, "PNG signature: %02X %02X %02X %02X %02X %02X %02X %02X", 
-                    data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7]);
-        } else {
-            ESP_LOGW(TAG, "⚠️  PNG header validation failed - may not be a valid PNG file");
-            ESP_LOGW(TAG, "File signature: %02X %02X %02X %02X %02X %02X %02X %02X", 
-                    data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7]);
-        }
-    } else {
-        ESP_LOGW(TAG, "⚠️  Image data too small to validate PNG header");
-    }
-
     // 检查图片大小是否合理（QR码图片通常在1KB-50KB之间）
     if (image_data.length() < 500) {
         ESP_LOGW(TAG, "⚠️  Image size seems too small for a QR code (%d bytes)", image_data.length());
@@ -714,7 +697,7 @@ bool Ota::DownloadAndDisplayQRCode() {
     }
     
     // 将图片数据保存到成员变量中，供Application调用
-    qr_image_data_ = image_data;
+    qr_image_data_ =  image_data;
     
     ESP_LOGI(TAG, "=== QR Code Download Complete ===");
     return true;
