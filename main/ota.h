@@ -14,12 +14,15 @@ public:
 
     bool CheckVersion();
     esp_err_t Activate();
+    bool Download_Qrcode();
     bool HasActivationChallenge() { return has_activation_challenge_; }
     bool HasNewVersion() { return has_new_version_; }
     bool HasMqttConfig() { return has_mqtt_config_; }
     bool HasWebsocketConfig() { return has_websocket_config_; }
     bool HasActivationCode() { return has_activation_code_; }
+    bool HasWeChatQrCodeUrl() { return has_wechat_qr_code_url_; }
     bool HasServerTime() { return has_server_time_; }
+    
     void StartUpgrade(std::function<void(int progress, size_t speed)> callback);
     void MarkCurrentVersionValid();
 
@@ -27,11 +30,16 @@ public:
     const std::string& GetCurrentVersion() const { return current_version_; }
     const std::string& GetActivationMessage() const { return activation_message_; }
     const std::string& GetActivationCode() const { return activation_code_; }
+    const std::string& GetWechatQrCodeUrl() const { return wechat_qr_code_url_; }
+    
     std::string GetCheckVersionUrl();
+    const std::string& GetWechatQrData() const;
 
 private:
     std::string activation_message_;
     std::string activation_code_;
+    std::string wechat_qr_code_url_ ;
+    bool has_wechat_qr_code_url_ = false ;
     bool has_new_version_ = false;
     bool has_mqtt_config_ = false;
     bool has_websocket_config_ = false;
@@ -44,6 +52,7 @@ private:
     std::string firmware_url_;
     std::string activation_challenge_;
     std::string serial_number_;
+    std::string wechat_qr_data_;
     int activation_timeout_ms_ = 30000;
 
     void Upgrade(const std::string& firmware_url);

@@ -80,12 +80,14 @@ public:
     // 添加SetIcon方法声明
     virtual void SetIcon(const char* icon) override; 
 
+    // 设置二维码显示
+    virtual void SetWechatQrcodeImage(const lv_img_dsc_t* img_dsc) override;
     //otto 新增函数
 private:
     void SetupGifContainer();
-
+    void SetupActivationStatusContainer();
     lv_obj_t* emotion_gif_;  ///< GIF表情组件 >
-
+    lv_obj_t* qr_image_object_ = nullptr;
     // 表情映射
     struct EmotionMap {
         const char* name;

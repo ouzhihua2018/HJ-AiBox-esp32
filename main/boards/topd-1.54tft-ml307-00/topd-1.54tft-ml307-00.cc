@@ -48,9 +48,9 @@ private:
 
     void InitializePowerManager() {
         power_manager_ = new PowerManager(GPIO_NUM_9);
-        power_manager_->OnTemperatureChanged([this](float chip_temp) {
-            display_->UpdateHighTempWarning(chip_temp);
-        });
+        // power_manager_->OnTemperatureChanged([this](float chip_temp) {
+        //     display_->UpdateHighTempWarning(chip_temp);
+        // });
         power_manager_->OnChargingStatusChanged([this](bool is_charging) {
             if (is_charging) {
                 power_save_timer_->SetEnabled(false);
@@ -257,7 +257,7 @@ private:
             .icon_font = &font_awesome_20_4,
             .emoji_font = font_emoji_64_init(),
         });
-        display_->SetupHighTempWarningPopup();
+        
     }
 
     void InitializeIot() {
@@ -280,7 +280,8 @@ public:
         human_sensor_low_start_time_(0),
         was_in_listening_state_(false),
         goodbye_message_sent_(false) 
-    {
+    {   
+
         InitializePowerManager();
         InitializePowerSaveTimer();
         InitializeSpi();
@@ -328,6 +329,7 @@ public:
         }
         DualNetworkBoard::SetPowerSaveMode(enabled);
     }
+    
 };
 
 DECLARE_BOARD(TOPD_1_54TFT_ML307_00);

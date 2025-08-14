@@ -10,7 +10,8 @@
 #include "iot/thing_manager.h"
 #include "assets/lang_config.h"
 #include "mcp_server.h"
-
+#include "sample.h"
+#include "settings.h"
 #if CONFIG_USE_AUDIO_PROCESSOR
 #include "afe_audio_processor.h"
 #else
@@ -106,7 +107,7 @@ void Application::CheckNewVersion() {
     while (true) {
         SetDeviceState(kDeviceStateActivating);
         auto display = Board::GetInstance().GetDisplay();
-        display->SetStatus(Lang::Strings::CHECKING_NEW_VERSION);
+        //display->SetStatus(Lang::Strings::CHECKING_NEW_VERSION);
 
         if (!ota_.CheckVersion()) {
             retry_count++;
@@ -139,9 +140,9 @@ void Application::CheckNewVersion() {
 
             SetDeviceState(kDeviceStateUpgrading);
             
-            display->SetIcon(FONT_AWESOME_DOWNLOAD);
-            std::string message = std::string(Lang::Strings::NEW_VERSION) + ota_.GetFirmwareVersion();
-            display->SetChatMessage("system", message.c_str());
+            //display->SetIcon(FONT_AWESOME_DOWNLOAD);
+            //std::string message = std::string(Lang::Strings::NEW_VERSION) + ota_.GetFirmwareVersion();
+            //display->SetChatMessage("system", message.c_str());
 
             auto& board = Board::GetInstance();
             board.SetPowerSaveMode(false);
@@ -162,11 +163,11 @@ void Application::CheckNewVersion() {
             ota_.StartUpgrade([display](int progress, size_t speed) {
                 char buffer[64];
                 snprintf(buffer, sizeof(buffer), "%d%% %uKB/s", progress, speed / 1024);
-                display->SetChatMessage("system", buffer);
+                //display->SetChatMessage("system", buffer);
             });
 
             // If upgrade success, the device will reboot and never reach here
-            display->SetStatus(Lang::Strings::UPGRADE_FAILED);
+            //display->SetStatus(Lang::Strings::UPGRADE_FAILED);
             ESP_LOGI(TAG, "Firmware upgrade failed...");
             vTaskDelay(pdMS_TO_TICKS(3000));
             Reboot();
@@ -175,24 +176,29 @@ void Application::CheckNewVersion() {
 
         // No new version, mark the current version as valid
         ota_.MarkCurrentVersionValid();
+        
+        // 是否已激活判断
         if (!ota_.HasActivationCode() && !ota_.HasActivationChallenge()) {
             xEventGroupSetBits(event_group_, CHECK_NEW_VERSION_DONE_EVENT);
             // Exit the loop if done checking new version
             break;
         }
-
-        display->SetStatus(Lang::Strings::ACTIVATION);
-        // Activation code is shown to the user and waiting for the user to input
-        if (ota_.HasActivationCode()) {
-            ShowActivationCode();
+        ESP_LOGW(TAG,"ota_.HasWeChatQrCodeUrl():%d",ota_.HasWeChatQrCodeUrl());
+        // QrCode is shown to the user and waiting for the user to input
+        if (ota_.HasWeChatQrCodeUrl()) {
+            ShowWechatQrCode();
         }
-
+       
+        /////////////////////////////////////////////////////
         // This will block the loop until the activation is done or timeout
         for (int i = 0; i < 10; ++i) {
             ESP_LOGI(TAG, "Activating... %d/%d", i + 1, 10);
             esp_err_t err = ota_.Activate();
             if (err == ESP_OK) {
                 xEventGroupSetBits(event_group_, CHECK_NEW_VERSION_DONE_EVENT);
+                ESP_LOGI(TAG, "Activation successful,restart after 3 seconds");
+                vTaskDelay(pdMS_TO_TICKS(3000));
+                Reboot();
                 break;
             } else if (err == ESP_ERR_TIMEOUT) {
                 vTaskDelay(pdMS_TO_TICKS(3000));
@@ -237,6 +243,39 @@ void Application::ShowActivationCode() {
             PlaySound(it->sound);
         }
     }
+}
+
+void Application::ShowWechatQrCode() {
+    auto& message = ota_.GetActivationMessage();
+    //Download Qrcode
+    if(!ota_.Download_Qrcode()){
+        ESP_LOGE(TAG,"wechat_qrcode_download_fail");
+        return ;
+    }
+    ESP_LOGI(TAG,"=============================================");
+    ESP_LOGI(TAG,"The QR code was successfully downloaded.");
+    //show Qrcode
+    auto& board = Board::GetInstance();
+    auto display = board.GetDisplay();
+    // 正确代码：获取引用后取指针           //careful 若返回非引用，临时string的c_str()会被释放
+    const std::string& qr_data = ota_.GetWechatQrData(); // 引用指向有效内存
+    const char* png_image = qr_data.c_str(); 
+    qrcode_img.data = (uint8_t*)png_image;
+    qrcode_img.data_size = qr_data.size(); // 同时传递正确的大小
+    ESP_LOGI(TAG,"qrcode_img.data_size.%ld",qrcode_img.data_size);
+    qrcode_img.header.cf = LV_COLOR_FORMAT_RAW;
+    qrcode_img.header.w = 200;
+    qrcode_img.header.h = 200;
+    
+    display->SetWechatQrcodeImage(&qrcode_img);
+    ESP_LOGI(TAG,"=============================================");
+    ESP_LOGI(TAG,"The QR code was show completed.");
+
+    PlaySound(Lang::Sounds::P3_ACTIVATION_QRCODE);
+    // This sentence uses 9KB of SRAM, so we need to wait for it to finish
+    //Alert(Lang::Strings::ACTIVATION, message.c_str(), "happy", Lang::Sounds::P3_ACTIVATION);
+
+    
 }
 
 void Application::Alert(const char* status, const char* message, const char* emotion, const std::string_view& sound) {
@@ -374,9 +413,11 @@ void Application::Start() {
     SetDeviceState(kDeviceStateStarting);
 
     /* Setup the display */
+    ESP_LOGI(TAG,"GetDisplay");
     auto display = board.GetDisplay();
 
     /* Setup the audio codec */
+    ESP_LOGI(TAG,"audio start");
     auto codec = board.GetAudioCodec();
     opus_decoder_ = std::make_unique<OpusDecoderWrapper>(codec->output_sample_rate(), 1, OPUS_FRAME_DURATION_MS);
     opus_encoder_ = std::make_unique<OpusEncoderWrapper>(16000, 1, OPUS_FRAME_DURATION_MS);
@@ -413,7 +454,7 @@ void Application::Start() {
 
     /* Start the clock timer to update the status bar */
     esp_timer_start_periodic(clock_timer_handle_, 1000000);
-
+    ESP_LOGI(TAG,"startnetwork");
     /* Wait for the network to be ready */
     board.StartNetwork();
 
@@ -423,6 +464,7 @@ void Application::Start() {
     // Check for new firmware version or get the MQTT broker address
     CheckNewVersion();
 
+    ESP_LOGI(TAG, "leave checknewversion");
     // Initialize the protocol
     display->SetStatus(Lang::Strings::LOADING_PROTOCOL);
 
@@ -656,7 +698,7 @@ void Application::Start() {
         });
     });
     wake_word_->StartDetection();
-
+    ESP_LOGE(TAG,"thread running here!!!!!!!!!!!!");
     // Wait for the new version check to finish
     xEventGroupWaitBits(event_group_, CHECK_NEW_VERSION_DONE_EVENT, pdTRUE, pdFALSE, portMAX_DELAY);
     SetDeviceState(kDeviceStateIdle);
