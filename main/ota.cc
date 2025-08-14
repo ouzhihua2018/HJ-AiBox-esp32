@@ -46,7 +46,13 @@ std::string Ota::GetCheckVersionUrl() {
     if (url.empty()) {
         url = CONFIG_OTA_URL;
     }
+    url = "http://core.device.158box.com/xiaozhi/ota2/";
     return url;
+}
+
+// 在 Ota 类中修改方法定义
+const std::string& Ota::GetWechatQrData() const {  // 返回 const 引用
+    return wechat_qr_data_;
 }
 
 Http* Ota::SetupHttp() {
@@ -79,6 +85,7 @@ bool Ota::CheckVersion() {
     ESP_LOGI(TAG, "Current version: %s", current_version_.c_str());
 
     std::string url = GetCheckVersionUrl();
+    ESP_LOGI(TAG, "OTA URL:%s", url.c_str());
     if (url.length() < 10) {
         ESP_LOGE(TAG, "Check version URL is not properly set");
         return false;
@@ -102,6 +109,7 @@ bool Ota::CheckVersion() {
     }
 
     data = http->ReadAll();
+    ESP_LOGI(TAG,"OTA POST RESPONSE JSON:%s",data.c_str());
     http->Close();
 
     // Response: { "firmware": { "version": "1.0.0", "url": "http://" } }
@@ -136,6 +144,20 @@ bool Ota::CheckVersion() {
         if (cJSON_IsNumber(timeout_ms)) {
             activation_timeout_ms_ = timeout_ms->valueint;
         }
+    }
+    
+    
+    has_wechat_qr_code_url_ = false;
+    cJSON *wechat = cJSON_GetObjectItem(root, "weChat");
+    if (cJSON_IsObject(wechat)) {
+        cJSON *codeUrl = cJSON_GetObjectItem(wechat, "codeUrl");
+        if(cJSON_IsString(codeUrl)){
+            wechat_qr_code_url_ = codeUrl -> valuestring;
+            has_wechat_qr_code_url_ = true;
+            ESP_LOGW(TAG,"wechat section parse ok!");
+        }
+    } else {
+        ESP_LOGI(TAG, "No wechat section found!");
     }
 
     has_mqtt_config_ = false;
@@ -172,6 +194,7 @@ bool Ota::CheckVersion() {
         ESP_LOGI(TAG, "No websocket section found!");
     }
 
+   
     has_server_time_ = false;
     cJSON *server_time = cJSON_GetObjectItem(root, "server_time");
     if (cJSON_IsObject(server_time)) {
@@ -461,7 +484,50 @@ esp_err_t Ota::Activate() {
         ESP_LOGE(TAG, "Failed to activate, code: %d, body: %s", status_code, http->ReadAll().c_str());
         return ESP_FAIL;
     }
-
-    ESP_LOGI(TAG, "Activation successful");
+    //激活成功
+    Settings settings("board", true);
+    settings.SetInt("has_activation",true);
+    
+    //ESP_LOGI(TAG, "Activation successful");
     return ESP_OK;
+}
+
+bool Ota::Download_Qrcode()
+{   
+    Board& board = Board::GetInstance();
+    //Get Wechat QrCode URL
+    auto& Wechat_Qr_Code_Url = GetWechatQrCodeUrl();
+    if(Wechat_Qr_Code_Url.data() == NULL){
+        ESP_LOGE(TAG,"NO Qr_code_url");
+        return false;
+    }
+    ESP_LOGI(TAG,"-------------------------------------");
+    ESP_LOGI(TAG,"Get_Wechat_Qrcode_URL:%s",Wechat_Qr_Code_Url.c_str());
+    //Download Qrcode
+    auto http = SetupHttp();  //default http header
+    // 设置下载图片的请求头
+    http->SetHeader("User-Agent", "ESP32-QRCode-Downloader/1.0");
+    http->SetHeader("Accept", "image/png,image/*,*/*");
+    http->SetHeader("Cache-Control", "no-cache");
+    http->Open("GET",Wechat_Qr_Code_Url);
+
+    int status = http->GetStatusCode();
+    if(status != 200){
+        ESP_LOGE(TAG,"Wechat Qrcode http response error,status %d",status);
+        return false;
+    }
+    wechat_qr_data_ = http->ReadAll();
+    http->Close();
+    const char * png_header_check = wechat_qr_data_.c_str();
+    ESP_LOGI(TAG, "Image header bytes: %02X %02X %02X %02X %02X %02X %02X %02X", 
+        png_header_check[0], png_header_check[1], png_header_check[2], png_header_check[3], 
+        png_header_check[4], png_header_check[5], png_header_check[6], png_header_check[7]);
+    if(png_header_check[0] !=0x89 ||png_header_check[1] !=0x50 ||png_header_check[2] !=0x4E ||png_header_check[3] !=0x47 ||
+        png_header_check[4] !=0x0D ||png_header_check[5] !=0x0A ||png_header_check[6] !=0x1A ||png_header_check[7] !=0x0A ){
+        ESP_LOGI(TAG, "wechat qrcode png header check error");
+        return false;
+    }
+    ESP_LOGI(TAG, "wechat qrcode png header check pass");
+
+    return true;
 }

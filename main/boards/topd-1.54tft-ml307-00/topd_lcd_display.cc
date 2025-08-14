@@ -6,11 +6,12 @@
 #include <cstring>
 #include <string>
 #include <libs/gif/lv_gif.h>
-
+#include "board.h"
 #include "display/lcd_display.h"
 #include "font_awesome_symbols.h"
 
 #define TAG "TopdEmojiDisplay"
+
 
 // 表情映射表 - 将原版21种表情映射到现有6个GIF
 const TopdEmojiDisplay::EmotionMap TopdEmojiDisplay::emotion_maps_[] = {
@@ -56,12 +57,18 @@ TopdEmojiDisplay::TopdEmojiDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_p
     : SpiLcdDisplay(panel_io, panel, width, height, offset_x, offset_y, mirror_x, mirror_y, swap_xy,
                     fonts),
       emotion_gif_(nullptr) {
-    SetupGifContainer();
+    ESP_LOGI(TAG,"TopdDisplay construct");
+   
+    if(Board::GetActivationStatus()){
+        SetupGifContainer(); 
+        ESP_LOGI(TAG,"SetupGifContainer();");
+    } else SetupActivationStatusContainer();
+   
 };
 
 void TopdEmojiDisplay::SetupGifContainer() {
     DisplayLockGuard lock(this);
-
+    SetupHighTempWarningPopup();
     if (emotion_label_) {
         lv_obj_del(emotion_label_);
     }
@@ -110,6 +117,42 @@ void TopdEmojiDisplay::SetupGifContainer() {
     lv_obj_align(chat_message_label_, LV_ALIGN_BOTTOM_MID, 0, 0);
 
     LcdDisplay::SetTheme("dark");
+}
+
+void TopdEmojiDisplay::SetupActivationStatusContainer()
+{   
+    ESP_LOGI(TAG,"SetupActivationStatusContainer;");
+    DisplayLockGuard lock(this);
+    
+    if (emotion_label_) {
+        lv_obj_del(emotion_label_);
+        emotion_label_=nullptr;
+    }
+
+    if (chat_message_label_) {
+        lv_obj_del(chat_message_label_);
+        chat_message_label_=nullptr;
+    }
+    if (content_) {
+        lv_obj_del(content_);
+    }
+
+    content_ = lv_obj_create(container_);
+    lv_obj_set_scrollbar_mode(content_, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_set_size(content_, LV_HOR_RES, LV_HOR_RES);
+    lv_obj_set_style_bg_opa(content_, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(content_, 0, 0);
+    lv_obj_set_flex_grow(content_, 1);
+    lv_obj_center(content_);
+ 
+    qr_image_object_ = lv_image_create(content_);
+    lv_obj_set_size(qr_image_object_, width_ * 0.9, height_ * 0.9);
+    ESP_LOGI(TAG,"qr_image_object_ size: %.2f, %.2f",width_ * 0.9,height_ * 0.9);
+    lv_obj_align(qr_image_object_, LV_ALIGN_CENTER, 0, 0);    
+    lv_obj_add_flag(qr_image_object_, LV_OBJ_FLAG_HIDDEN);  
+
+    LcdDisplay::SetTheme("dark");
+    ESP_LOGI(TAG,"SetupActivationStatusContainer END");
 }
 
 void TopdEmojiDisplay::SetEmotion(const char* emotion) {
@@ -168,5 +211,47 @@ void TopdEmojiDisplay::SetIcon(const char* icon) {
         lv_obj_clear_flag(chat_message_label_, LV_OBJ_FLAG_HIDDEN);
 
         ESP_LOGI(TAG, "设置图标: %s", icon);
+    }
+}
+
+void TopdEmojiDisplay::SetWechatQrcodeImage(const lv_img_dsc_t *img_dsc)
+{
+    DisplayLockGuard lock(this);
+    uint32_t img_width = 0, img_height = 0;
+    if (qr_image_object_ == nullptr) {
+        return;
+    }
+    const uint8_t * png_data = img_dsc->data;
+    size_t png_len = img_dsc->data_size;
+    const uint8_t* png_footer = png_data + (png_len - 12);
+    ESP_LOGI(TAG, "再次包头检查: %02X %02X %02X %02X %02X %02X %02X %02X", 
+        png_data[0], png_data[1], png_data[2], png_data[3], 
+        png_data[4], png_data[5], png_data[6], png_data[7]);
+    ESP_LOGI(TAG, "PNG 包尾检查: %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X",
+            png_footer[0],  png_footer[1],  png_footer[2],  png_footer[3],
+            png_footer[4],  png_footer[5],  png_footer[6],  png_footer[7],
+            png_footer[8],  png_footer[9],  png_footer[10], png_footer[11]);
+
+    if (img_dsc != nullptr && img_dsc->header.w > 0 && img_dsc->header.h > 0) {
+    //打印图片尺寸信息
+    lv_image_header_t img_header;
+    if (lv_image_decoder_get_info(img_dsc, &img_header) != LV_RES_OK)
+    {   
+        ESP_LOGE(TAG,"[%s:%d] lv_img_decoder_get_info errror", __FUNCTION__, __LINE__);
+        return;
+    }
+    img_width = img_header.w;
+    img_height = img_header.h;
+    printf("[%s:%d] img_width:%ld, img_height:%ld\n", __FUNCTION__, __LINE__, img_width, img_height);
+    // show
+    lv_image_set_src(qr_image_object_,img_dsc);
+    lv_obj_clear_flag(qr_image_object_, LV_OBJ_FLAG_HIDDEN);
+
+    if (emotion_label_ != nullptr) {
+        lv_obj_add_flag(emotion_label_, LV_OBJ_FLAG_HIDDEN);
+    }
+      // 清除所有状态文字和聊天信息，确保屏幕只显示二维码
+    SetStatus("");
+    SetChatMessage("system", "");
     }
 }

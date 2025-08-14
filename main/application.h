@@ -17,6 +17,7 @@
 #include <opus_decoder.h>
 #include <opus_resampler.h>
 
+#include "display.h"
 #include "protocol.h"
 #include "ota.h"
 #include "background_task.h"
@@ -83,7 +84,7 @@ public:
 private:
     Application();
     ~Application();
-
+    lv_image_dsc_t qrcode_img ;
     std::unique_ptr<WakeWord> wake_word_;
     std::unique_ptr<AudioProcessor> audio_processor_;
     Ota ota_;
@@ -129,6 +130,7 @@ private:
     void SetDecodeSampleRate(int sample_rate, int frame_duration);
     void CheckNewVersion();
     void ShowActivationCode();
+    void ShowWechatQrCode();
     void OnClockTimer();
     void SetListeningMode(ListeningMode mode);
     void AudioLoop();

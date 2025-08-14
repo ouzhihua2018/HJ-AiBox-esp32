@@ -11,6 +11,8 @@
 
 #define TAG "Board"
 
+bool Board::has_activation_ = false; // 初始化为未激活
+
 Board::Board() {
     Settings settings("board", true);
     uuid_ = settings.GetString("uuid");
@@ -18,6 +20,10 @@ Board::Board() {
         uuid_ = GenerateUuid();
         settings.SetString("uuid", uuid_);
     }
+   
+    
+    Board::has_activation_ = settings.GetInt("has_activation",false);
+    
     ESP_LOGI(TAG, "UUID=%s SKU=%s", uuid_.c_str(), BOARD_NAME);
 }
 
