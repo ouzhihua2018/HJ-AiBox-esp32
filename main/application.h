@@ -17,6 +17,7 @@
 #include <opus_decoder.h>
 #include <opus_resampler.h>
 
+#include "display.h"
 #include "protocol.h"
 #include "ota.h"
 #include "background_task.h"
@@ -79,28 +80,11 @@ public:
     void SetAecMode(AecMode mode);
     AecMode GetAecMode() const { return aec_mode_; }
     BackgroundTask* GetBackgroundTask() const { return background_task_; }
-    
-    // 测试二维码功能
-    void TestQRCodeFunction();
-    void TestOTARequestFormat();
-    
-    // 五步开机流程方法
-    bool InitializeNetworkConnection();     // 第一步：网络连接初始化
-    bool CheckDeviceRegistrationStatus();   // 第二步：检查设备注册状态
-    bool IsDeviceRegistered();              // 判断设备是否已注册
-    bool GetQRCodeDownloadUrl();            // 第三步：获取QR码下载URL
-    bool DownloadAndProcessQRCode();        // 第四步：下载并处理QR码图片
-    void DisplayQRCodeOnTFT();              // 第五步：在TFT屏显示QR码
-    void WaitForDeviceRegistration();       // 等待设备注册完成
-    
-    // 原有方法保留（向后兼容）
-    bool GetQRCodeInfoOnly();  // 仅获取二维码信息，不进行固件升级检查
-    void WaitForDeviceAssociation();  // 等待设备关联完成
 
 private:
     Application();
     ~Application();
-
+    lv_image_dsc_t qrcode_img ;
     std::unique_ptr<WakeWord> wake_word_;
     std::unique_ptr<AudioProcessor> audio_processor_;
     Ota ota_;
@@ -146,8 +130,7 @@ private:
     void SetDecodeSampleRate(int sample_rate, int frame_duration);
     void CheckNewVersion();
     void ShowActivationCode();
-    void ShowQRCode();  // 新增：显示二维码方法
-    void HandleDeviceActivationAndQRCode();  // 新增：处理设备关联状态和二维码显示
+    void ShowWechatQrCode();
     void OnClockTimer();
     void SetListeningMode(ListeningMode mode);
     void AudioLoop();

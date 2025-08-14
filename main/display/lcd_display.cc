@@ -144,7 +144,7 @@ SpiLcdDisplay::SpiLcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_h
     if (offset_x != 0 || offset_y != 0) {
         lv_display_set_offset(display_, offset_x, offset_y);
     }
-
+    ESP_LOGI(TAG,"SetupUI");
     SetupUI();
 }
 
@@ -603,7 +603,7 @@ void LcdDisplay::SetChatMessage(const char* role, const char* content) {
 #else
 void LcdDisplay::SetupUI() {
     DisplayLockGuard lock(this);
-
+    ESP_LOGI(TAG,"IN SETUPUI");
     auto screen = lv_screen_active();
     lv_obj_set_style_text_font(screen, fonts_.text_font, 0);
     lv_obj_set_style_text_color(screen, current_theme_.text, 0);
