@@ -25,13 +25,15 @@ protected:
 
     // 软件生成的设备唯一标识
     std::string uuid_;
-
+    
 public:
+
     static Board& GetInstance() {
         static Board* instance = static_cast<Board*>(create_board());
         return *instance;
     }
-
+    static bool has_activation_; 
+    static bool GetActivationStatus() { return has_activation_; }
     virtual ~Board() = default;
     virtual std::string GetBoardType() = 0;
     virtual std::string GetUuid() { return uuid_; }
@@ -53,6 +55,8 @@ public:
     virtual std::string GetBoardJson() = 0;
     virtual std::string GetDeviceStatusJson() = 0;
 };
+
+
 
 #define DECLARE_BOARD(BOARD_CLASS_NAME) \
 void* create_board() { \

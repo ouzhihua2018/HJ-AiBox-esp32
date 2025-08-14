@@ -10,7 +10,6 @@
 #include "led/single_led.h"
 #include "assets/lang_config.h"
 #include "power_manager.h"
-#include "ota.h"
 
 #include <esp_log.h>
 #include <esp_lcd_panel_vendor.h>
@@ -36,7 +35,6 @@ private:
     Button volume_down_button_;
     Button user_button_; // 新增语音ASRPRO激活板virtual按键
     Button human_sensor_button_; // 新增人体接近传感器激活按键，利用Button类实现
-    Ota ota_; // OTA更新实例
     TopdEmojiDisplay* display_;
     PowerSaveTimer* power_save_timer_;
     PowerManager* power_manager_;
@@ -50,9 +48,9 @@ private:
 
     void InitializePowerManager() {
         power_manager_ = new PowerManager(GPIO_NUM_9);
-        power_manager_->OnTemperatureChanged([this](float chip_temp) {
-            display_->UpdateHighTempWarning(chip_temp);
-        });
+        // power_manager_->OnTemperatureChanged([this](float chip_temp) {
+        //     display_->UpdateHighTempWarning(chip_temp);
+        // });
         power_manager_->OnChargingStatusChanged([this](bool is_charging) {
             if (is_charging) {
                 power_save_timer_->SetEnabled(false);
@@ -252,7 +250,6 @@ private:
         ESP_ERROR_CHECK(esp_lcd_panel_mirror(panel_, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y));
         ESP_ERROR_CHECK(esp_lcd_panel_invert_color(panel_, true));
 
-        
         display_ = new TopdEmojiDisplay(panel_io_, panel_, DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, 
             DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY, 
         {
@@ -260,21 +257,7 @@ private:
             .icon_font = &font_awesome_20_4,
             .emoji_font = font_emoji_64_init(),
         });
-        display_->SetupHighTempWarningPopup();
-
-        // 注释掉原有的开机二维码显示逻辑，改为在Application中通过OTA获取后显示
-        // //开机显示机器二维码
-        // if (!ota_.GetWeChatCodeUrl().empty()) 
-        //     {
-        //     ESP_LOGI(TAG, "Found QR code URL: %s", ota_.GetWeChatCodeUrl().c_str());
-        //     display_->ShowQRCode(ota_.GetWeChatCodeUrl());
-        //     ESP_LOGI(TAG, "QR code display request completed");
-        //     } 
-        // 
-        // else {
-        //     ESP_LOGW(TAG, "QR code unavailable");
-        //     display_->ShowQRCode("QR code Failed");
-        //     }
+        
     }
 
     void InitializeIot() {
@@ -282,47 +265,6 @@ private:
         thing_manager.AddThing(iot::CreateThing("Speaker"));
         thing_manager.AddThing(iot::CreateThing("Screen"));
         thing_manager.AddThing(iot::CreateThing("Battery"));
-    }
-
-    // 升级确认结束后检查激活状态并显示二维码
-    void CheckActivationStatusAndShowQR() {
-        ESP_LOGI(TAG, "Checking device activation status after upgrade confirmation");
-        
-        // 获取Application实例来检查设备激活状态
-        auto& app = Application::GetInstance();
-        
-        // 检查OTA实例获取激活状态
-        if (ota_.HasActivationCode() || ota_.HasActivationChallenge()) {
-            ESP_LOGI(TAG, "Device is not activated, showing QR code for activation");
-            
-            // 设置设备状态为激活中
-            app.SetDeviceState(kDeviceStateActivating);
-            
-            // 关闭所有表情显示，确保二维码清晰显示
-            if (display_) {
-                ESP_LOGI(TAG, "Hiding all emotions to show QR code clearly");
-                // 通过设置空字符串来隐藏表情，这会在TopdEmojiDisplay中被处理
-                display_->SetEmotion("");
-                display_->SetStatus("请扫码激活设备");
-                
-                // 显示二维码（如果有可用的URL）
-                if (ota_.HasWeChatCodeUrl()) {
-                    std::string qr_url = ota_.GetWeChatCodeUrl();
-                    ESP_LOGI(TAG, "Displaying QR code from URL: %s", qr_url.c_str());
-                    display_->ShowQRCode(qr_url);
-                } else {
-                    ESP_LOGW(TAG, "No QR code URL available, showing placeholder");
-                    display_->SetChatMessage("system", "二维码获取失败，请检查网络");
-                }
-            }
-        } else {
-            ESP_LOGI(TAG, "Device is already activated, proceeding with normal operation");
-            // 设备已激活，恢复正常显示
-            if (display_) {
-                display_->SetEmotion("neutral");
-                display_->SetStatus("待命");
-            }
-        }
     }
 
 public:
@@ -338,7 +280,8 @@ public:
         human_sensor_low_start_time_(0),
         was_in_listening_state_(false),
         goodbye_message_sent_(false) 
-    {
+    {   
+
         InitializePowerManager();
         InitializePowerSaveTimer();
         InitializeSpi();
@@ -386,12 +329,7 @@ public:
         }
         DualNetworkBoard::SetPowerSaveMode(enabled);
     }
-
-    // 公共方法：升级确认结束后调用，检查激活状态并显示二维码
-    void PostUpgradeActivationCheck() {
-        ESP_LOGI(TAG, "Post-upgrade activation check called");
-        CheckActivationStatusAndShowQR();
-    }
+    
 };
 
 DECLARE_BOARD(TOPD_1_54TFT_ML307_00);
