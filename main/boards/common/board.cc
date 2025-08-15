@@ -11,6 +11,8 @@
 
 #define TAG "Board"
 
+
+
 Board::Board() {
     Settings settings("board", true);
     uuid_ = settings.GetString("uuid");
@@ -18,6 +20,7 @@ Board::Board() {
         uuid_ = GenerateUuid();
         settings.SetString("uuid", uuid_);
     }
+    
     ESP_LOGI(TAG, "UUID=%s SKU=%s", uuid_.c_str(), BOARD_NAME);
 }
 

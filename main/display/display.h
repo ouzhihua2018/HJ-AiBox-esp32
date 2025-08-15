@@ -26,13 +26,12 @@ public:
     virtual void SetChatMessage(const char* role, const char* content);
     virtual void SetIcon(const char* icon);
     virtual void SetPreviewImage(const lv_img_dsc_t* image);
+    virtual void SetWechatQrcodeImage(const lv_img_dsc_t* img_dsc) {}; //do nothing,for topd board use
     virtual void SetTheme(const std::string& theme_name);
     virtual std::string GetTheme() { return current_theme_name_; }
     virtual void UpdateStatusBar(bool update_all = false);
-    
-    // 新增：显示二维码图片数据
-    virtual bool ShowQRCodeImage(const uint8_t* image_data, size_t data_size) { return false; }
-
+    virtual void SwitchToGifContainer() {}; //do nothing,for topd board use
+    virtual void SwitchToActivationStatusContainer() {}; //do nothing,for topd board use
     inline int width() const { return width_; }
     inline int height() const { return height_; }
     lv_img_dsc_t Qr_image_;
