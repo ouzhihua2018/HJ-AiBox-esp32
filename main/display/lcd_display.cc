@@ -81,6 +81,7 @@ LcdDisplay::LcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_
     } else if (current_theme_name_ == "light") {
         current_theme_ = LIGHT_THEME;
     }
+    
 }
 
 SpiLcdDisplay::SpiLcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_t panel,
@@ -775,23 +776,86 @@ void LcdDisplay::SetIcon(const char* icon) {
     }
 }
 
+
+// img对象设置png图片自适应显示
+static void lv_obj_img_png_set_zoom(lv_obj_t * obj_img, const lv_img_dsc_t* src, uint32_t obj_width, uint32_t obj_height)
+{
+    if (obj_img == NULL || src == NULL)
+    {
+        printf("[%s:%d] param errror\n", __FUNCTION__, __LINE__);
+        return;
+    }
+ 
+    if (obj_width == 0 || obj_height == 0)
+    {
+        printf("[%s:%d] param errror\n", __FUNCTION__, __LINE__);
+        return;
+    }
+ 
+    uint32_t img_width = 0, img_height = 0, zoom_factor = 0;
+    // 获取img对象的信息
+    lv_image_header_t header;
+    
+    if (lv_image_decoder_get_info(src, &header) != LV_RES_OK)
+    {
+        printf("[%s:%d] lv_img_decoder_get_info errror\n", __FUNCTION__, __LINE__);
+        return;
+    }
+   
+    img_width = header.w;
+    img_height = header.h;
+ 
+    printf("[%s:%d] img_width:%ld, img_height:%ld, obj_width:%ld, obj_height:%ld\n", __FUNCTION__, __LINE__, img_width, img_height, obj_width, obj_height);
+    if (img_width != 0 && img_height != 0)
+    {
+        uint32_t y_a= obj_height * img_width;   
+        uint32_t x_b= obj_width * img_height;
+ 
+        if (x_b >= y_a)
+        {
+            if (img_height >= obj_height)
+            {
+                uint32_t x = obj_height * 256;
+                zoom_factor = x / img_height;
+                ESP_LOGI(TAG,"zoom_factor%ld",zoom_factor);
+                lv_img_set_zoom(obj_img, zoom_factor);
+            }
+        }
+        else
+        {
+            if (img_width > obj_width)
+            {
+                uint32_t x = obj_width * 256;
+                zoom_factor = x / img_width;
+                ESP_LOGI(TAG,"zoom_factor%ld",zoom_factor);
+                lv_img_set_zoom(obj_img, zoom_factor);
+            }
+        }
+    }
+}
+
 void LcdDisplay::SetPreviewImage(const lv_img_dsc_t* img_dsc) {
     DisplayLockGuard lock(this);
     if (preview_image_ == nullptr) {
         return;
     }
+ 
+
+    if (img_dsc != nullptr && img_dsc->header.w > 0 && img_dsc->header.h > 0) {
+        ESP_LOGI(TAG,"SetPreviewImage - width: %u, height: %u", img_dsc->header.w, img_dsc->header.h);
+        //lv_obj_img_png_set_zoom(preview_image_, img_dsc, width_ * 0.8, width_ * 0.8);
     
-    if (img_dsc != nullptr) {
-        // zoom factor 0.5
-        lv_img_set_zoom(preview_image_, 128 * width_ / img_dsc->header.w);
         // 设置图片源并显示预览图片
-        lv_img_set_src(preview_image_, img_dsc);
+        ESP_LOGI(TAG,"Set_src");
+        lv_img_set_src(preview_image_, img_dsc);              
         lv_obj_clear_flag(preview_image_, LV_OBJ_FLAG_HIDDEN);
         // 隐藏emotion_label_
         if (emotion_label_ != nullptr) {
             lv_obj_add_flag(emotion_label_, LV_OBJ_FLAG_HIDDEN);
         }
     } else {
+        ESP_LOGE(TAG, "Invalid image descriptor or zero dimensions ", 
+                );
         // 隐藏预览图片并显示emotion_label_
         lv_obj_add_flag(preview_image_, LV_OBJ_FLAG_HIDDEN);
         if (emotion_label_ != nullptr) {

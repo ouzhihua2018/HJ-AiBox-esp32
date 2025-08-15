@@ -92,6 +92,9 @@ void OttoEmojiDisplay::SetupGifContainer() {
     lv_obj_set_style_border_width(emotion_gif_, 0, 0);
     lv_obj_set_style_bg_opa(emotion_gif_, LV_OPA_TRANSP, 0);
     lv_obj_center(emotion_gif_);
+    // 开机时隐藏表情GIF，不显示任何表情图片
+    lv_obj_add_flag(emotion_gif_, LV_OBJ_FLAG_HIDDEN);
+    // 先设置一个默认的GIF源，但保持隐藏状态
     lv_gif_set_src(emotion_gif_, &staticstate);
 
     chat_message_label_ = lv_label_create(content_);
