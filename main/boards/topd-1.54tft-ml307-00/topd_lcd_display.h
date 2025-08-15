@@ -103,9 +103,18 @@ private:
     lv_obj_t* emotion_gif_;  ///< GIF表情组件 >
     lv_obj_t* qr_container_ = nullptr;  ///< 二维码显示容器
     lv_obj_t* qr_img_obj_ = nullptr;    ///< 二维码图片对象
+    lv_obj_t* qr_screen_ = nullptr;     ///< 专用二维码屏幕（避免被其他UI覆盖）
+    lv_obj_t* prev_screen_ = nullptr;   ///< 切换前的屏幕
     
     // QR码图片数据管理（暂时保留用于未来扩展）
     std::unique_ptr<std::vector<uint16_t>> qr_rgb565_data_;  ///< RGB565图片数据
+
+    // 保存一份可供 lv_img 使用的图片描述符
+    lv_img_dsc_t qr_img_dsc_{};
+    bool qr_img_ready_ = false;
+
+    // 保存原始PNG数据（用于LVGL的RAW解码器）
+    std::vector<uint8_t> qr_png_data_;
 
     // 表情映射
     struct EmotionMap {

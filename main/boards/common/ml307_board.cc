@@ -4,6 +4,7 @@
 #include "display.h"
 #include "font_awesome_symbols.h"
 #include "assets/lang_config.h"
+#include "settings.h"
 
 #include <esp_log.h>
 #include <esp_timer.h>
@@ -35,9 +36,54 @@ void Ml307Board::StartNetwork() {
         ESP_LOGI(TAG, "ML307 material ready");
         application.Schedule([this, &application]() {
             application.SetDeviceState(kDeviceStateIdle);
+            // 模块上电就绪后，优先配置 APN 并拨号
+            Settings settings("ml307", false);
+            std::string apn = settings.GetString("apn");
+            std::string apn_user = settings.GetString("apn_user");
+            std::string apn_pass = settings.GetString("apn_pass");
+
+            if (!apn.empty()) {
+                // 设置 PDP 上下文 APN
+                modem_.Command(std::string("AT+CGDCONT=1,\"IP\",\"") + apn + "\"");
+            }
+            // 触发拨号，优先无参拨号；部分固件也支持带参拨号
+            if (!modem_.Command("AT+MIPCALL=1", 10000)) {
+                if (!apn.empty()) {
+                    std::string dial = std::string("AT+MIPCALL=1,\"") + apn + "\",\"" + apn_user + "\",\"" + apn_pass + "\"";
+                    modem_.Command(dial, 15000);
+                }
+            }
             WaitForNetworkReady();
         });
     });
+
+    // 上电后立即尝试配置 APN 并拨号，避免仅查询状态
+    {
+        Settings settings("ml307", false);
+        std::string apn = settings.GetString("apn");
+        std::string apn_user = settings.GetString("apn_user");
+        std::string apn_pass = settings.GetString("apn_pass");
+        if (apn.empty()) {
+            // 基于常见运营商的默认APN做兜底（可被NVS中的ml307/apn覆盖）
+            std::string carrier = modem_.GetCarrierName();
+            if (carrier.find("MOBILE") != std::string::npos || carrier.find("CMCC") != std::string::npos) {
+                apn = "CMNET"; // 中国移动
+            } else if (carrier.find("UNICOM") != std::string::npos || carrier.find("CUCC") != std::string::npos) {
+                apn = "3GNET"; // 中国联通
+            } else if (carrier.find("TELECOM") != std::string::npos || carrier.find("CT") != std::string::npos) {
+                apn = "CTNET"; // 中国电信
+            }
+        }
+        if (!apn.empty()) {
+            modem_.Command(std::string("AT+CGDCONT=1,\"IP\",\"") + apn + "\"");
+        }
+        if (!modem_.Command("AT+MIPCALL=1", 10000)) {
+            if (!apn.empty()) {
+                std::string dial = std::string("AT+MIPCALL=1,\"") + apn + "\",\"" + apn_user + "\",\"" + apn_pass + "\"";
+                modem_.Command(dial, 15000);
+            }
+        }
+    }
 
     WaitForNetworkReady();
 }

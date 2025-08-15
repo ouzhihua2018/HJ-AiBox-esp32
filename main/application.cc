@@ -10,9 +10,7 @@
 #include "iot/thing_manager.h"
 #include "assets/lang_config.h"
 #include "mcp_server.h"
-#include "boards/common/dual_network_board.h"
-#include "boards/common/wifi_board.h"
-#include "wifi_station.h"
+
 
 
 #if CONFIG_USE_AUDIO_PROCESSOR
@@ -503,19 +501,22 @@ void Application::CheckNewVersion()
                 display->SetChatMessage("system", buffer); });
 
             // If upgrade success, the device will reboot and never reach here
-            // 升级失败，保持原有提示词，然后检查设备关联状态
             display->SetStatus(Lang::Strings::UPGRADE_FAILED);
-            ESP_LOGI(TAG, "Firmware upgrade failed, checking device association status...");
+            ESP_LOGI(TAG, "Firmware upgrade failed...");
             vTaskDelay(pdMS_TO_TICKS(3000));
+<<<<<<< HEAD
 
             // 升级失败后，检查设备关联状态决定后续行为
             HandleDeviceActivationAndQRCode();
 
             xEventGroupSetBits(event_group_, CHECK_NEW_VERSION_DONE_EVENT);
+=======
+            Reboot();
+>>>>>>> 0f4a466141c1cd8ff8001902e870902c724f7307
             return;
         }
 
-        // No new version, mark the current version as valid
+        // 无新版本：标记当前版本有效
         ota_.MarkCurrentVersionValid();
 
         // 检查设备关联状态和二维码显示逻辑
@@ -867,6 +868,7 @@ void Application::Start()
     /* Start the clock timer to update the status bar */
     esp_timer_start_periodic(clock_timer_handle_, 1000000);
 
+<<<<<<< HEAD
     // 按照用户要求的五步开机流程
     ESP_LOGI(TAG, "=== 开机流程开始 ===");
 
@@ -931,6 +933,16 @@ void Application::Start()
         ESP_LOGI(TAG, "设备注册完成，检查固件版本");
         //CheckNewVersion();
     }
+=======
+    /* Wait for the network to be ready (align with application_Test.cc) */
+    board.StartNetwork();
+    
+    // Update the status bar immediately to show the network state
+    display->UpdateStatusBar(true);
+    
+    // Check for new firmware version or get the MQTT/Websocket address
+    CheckNewVersion();
+>>>>>>> 0f4a466141c1cd8ff8001902e870902c724f7307
 
     // Initialize the protocol
     display->SetStatus(Lang::Strings::LOADING_PROTOCOL);
@@ -1186,14 +1198,18 @@ void Application::Start()
         // 设备已激活，可以正常进入idle状态
         ESP_LOGI(TAG, "Device is activated, entering idle state");
         SetDeviceState(kDeviceStateIdle);
+<<<<<<< HEAD
 
         if (protocol_started)
         {
             // 只显示版本号，不显示"版本"字样，覆盖时间显示位置
+=======
+        
+        if (protocol_started) {
+            // 设备已绑定，恢复正常 UI
+>>>>>>> 0f4a466141c1cd8ff8001902e870902c724f7307
             std::string message = ota_.GetCurrentVersion();
-            // 将版本信息显示在屏幕顶部居中位置
             display->SetStatus(message.c_str());
-            // 清除聊天消息区域，确保版本信息在顶部显示
             display->SetChatMessage("system", "");
             // Play the success sound to indicate the device is ready
             ResetDecoder();
@@ -1883,6 +1899,7 @@ void Application::WaitForDeviceAssociation()
 
 // === 五步开机流程实现 ===
 
+<<<<<<< HEAD
 bool Application::InitializeNetworkConnection()
 {
     ESP_LOGI(TAG, "初始化网络连接");
@@ -1946,6 +1963,13 @@ bool Application::InitializeNetworkConnection()
     }
 
     return false;
+=======
+bool Application::InitializeNetworkConnection() {
+    // 简化：主程序不关心具体联网细节，全部交由板级（Board::StartNetwork）处理
+    ESP_LOGI(TAG, "初始化网络连接（由Board负责）");
+    Board::GetInstance().StartNetwork();
+    return true;
+>>>>>>> 0f4a466141c1cd8ff8001902e870902c724f7307
 }
 
 bool Application::CheckDeviceRegistrationStatus()
