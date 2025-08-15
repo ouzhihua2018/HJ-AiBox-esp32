@@ -6,7 +6,7 @@
 
 #include <esp_err.h>
 #include "board.h"
-
+#include "display.h"
 class Ota {
 public:
     Ota();

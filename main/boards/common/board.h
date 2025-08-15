@@ -32,8 +32,6 @@ public:
         static Board* instance = static_cast<Board*>(create_board());
         return *instance;
     }
-    static bool has_activation_; 
-    static bool GetActivationStatus() { return has_activation_; }
     virtual ~Board() = default;
     virtual std::string GetBoardType() = 0;
     virtual std::string GetUuid() { return uuid_; }
