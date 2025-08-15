@@ -34,7 +34,7 @@ public:
     virtual void SwitchToActivationStatusContainer() {}; //do nothing,for topd board use
     inline int width() const { return width_; }
     inline int height() const { return height_; }
-
+    lv_img_dsc_t Qr_image_;
 protected:
     int width_ = 0;
     int height_ = 0;
