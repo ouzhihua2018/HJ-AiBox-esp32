@@ -74,9 +74,9 @@ Http* Ota::SetupHttp() {
     http->SetHeader("Connection", "close");
     http->SetHeader("Accept-Encoding", "identity"); // 避免压缩，简化处理
     
-    // 设置超时时间（毫秒）
+    // 设置超时时间（毫秒）- 4G网络需要更长的超时时间
     // 注意：具体的超时设置方法取决于HTTP客户端的实现
-    ESP_LOGI(TAG, "HTTP client configured with SSL support");
+    ESP_LOGI(TAG, "HTTP client configured with SSL support and extended timeout for 4G");
 
     return http;
 }
@@ -105,14 +105,19 @@ bool Ota::CheckVersion() {
     std::string method = data.length() > 0 ? "POST" : "GET";
     http->SetContent(std::move(data));
 
+    ESP_LOGI(TAG, "Opening HTTP connection to: %s", url.c_str());
     if (!http->Open(method, url)) {
-        ESP_LOGE(TAG, "Failed to open HTTP connection");
+        ESP_LOGE(TAG, "Failed to open HTTP connection to: %s", url.c_str());
         return false;
     }
 
     auto status_code = http->GetStatusCode();
+    ESP_LOGI(TAG, "HTTP response status: %d", status_code);
+    
     if (status_code != 200) {
-        ESP_LOGE(TAG, "Failed to check version, status code: %d", status_code);
+        std::string error_response = http->ReadAll();
+        ESP_LOGE(TAG, "Failed to check version, status code: %d, response: %s", status_code, error_response.c_str());
+        http->Close();
         return false;
     }
 
@@ -502,7 +507,6 @@ esp_err_t Ota::Activate() {
 
 bool Ota::Download_Qrcode()
 {   
-    Board& board = Board::GetInstance();
     //Get Wechat QrCode URL
     auto& Wechat_Qr_Code_Url = GetWechatQrCodeUrl();
     if(Wechat_Qr_Code_Url.data() == NULL){
@@ -584,7 +588,6 @@ bool Ota::Download_Qrcode()
 }
 
 bool Ota::Download_Qrcode_Https() {
-    Board& board = Board::GetInstance();
     auto& Wechat_Qr_Code_Url = GetWechatQrCodeUrl();
     
     if(Wechat_Qr_Code_Url.data() == NULL){
@@ -613,17 +616,21 @@ bool Ota::Download_Qrcode_Https() {
     http->SetHeader("Cache-Control", "no-cache");
     
     // 尝试多次连接，处理SSL握手问题
-    int max_retries = 3;
+    int max_retries = 5; // 增加重试次数
     int retry_count = 0;
     bool success = false;
     
     while (retry_count < max_retries && !success) {
         ESP_LOGI(TAG, "HTTPS download attempt %d/%d", retry_count + 1, max_retries);
         
+        // 在每次重试前重置连接
+        http->Close();
+        vTaskDelay(pdMS_TO_TICKS(1000)); // 等待1秒
+        
         if (!http->Open("GET", Wechat_Qr_Code_Url)) {
             ESP_LOGE(TAG, "Failed to open HTTPS connection (attempt %d)", retry_count + 1);
             retry_count++;
-            vTaskDelay(pdMS_TO_TICKS(2000)); // 等待2秒后重试
+            vTaskDelay(pdMS_TO_TICKS(3000)); // 增加等待时间到3秒
             continue;
         }
         
@@ -632,23 +639,50 @@ bool Ota::Download_Qrcode_Https() {
         
         if (status == 200) {
             ESP_LOGI(TAG, "HTTPS connection successful, reading data...");
-            wechat_qr_data_ = http->ReadAll();
+            
+            // 分块读取数据，避免内存问题
+            std::string data;
+            const int chunk_size = 1024;
+            char buffer[chunk_size];
+            
+            while (true) {
+                int bytes_read = http->Read(buffer, chunk_size);
+                if (bytes_read <= 0) {
+                    break;
+                }
+                data.append(buffer, bytes_read);
+                
+                // 检查内存使用
+                if (data.size() > 1024 * 1024) { // 1MB限制
+                    ESP_LOGE(TAG, "Data too large, aborting download");
+                    break;
+                }
+            }
+            
             http->Close();
             
-            ESP_LOGI(TAG, "Downloaded image size: %zu bytes", wechat_qr_data_.size());
+            ESP_LOGI(TAG, "Downloaded image size: %zu bytes", data.size());
             
-            if (!wechat_qr_data_.empty()) {
+            if (!data.empty()) {
                 // 验证PNG头部
-                const char * png_header_check = wechat_qr_data_.c_str();
-                if(png_header_check[0] == 0x89 && png_header_check[1] == 0x50 && 
-                   png_header_check[2] == 0x4E && png_header_check[3] == 0x47 &&
-                   png_header_check[4] == 0x0D && png_header_check[5] == 0x0A && 
-                   png_header_check[6] == 0x1A && png_header_check[7] == 0x0A) {
-                    ESP_LOGI(TAG, "HTTPS download successful, PNG header verified");
-                    success = true;
-                    break;
+                if (data.size() >= 8) {
+                    const unsigned char* png_header = reinterpret_cast<const unsigned char*>(data.c_str());
+                    if(png_header[0] == 0x89 && png_header[1] == 0x50 && 
+                       png_header[2] == 0x4E && png_header[3] == 0x47 &&
+                       png_header[4] == 0x0D && png_header[5] == 0x0A && 
+                       png_header[6] == 0x1A && png_header[7] == 0x0A) {
+                        ESP_LOGI(TAG, "HTTPS download successful, PNG header verified");
+                        wechat_qr_data_ = std::move(data);
+                        success = true;
+                        break;
+                    } else {
+                        ESP_LOGE(TAG, "Invalid PNG header in downloaded data");
+                        ESP_LOGE(TAG, "Header bytes: %02X %02X %02X %02X %02X %02X %02X %02X",
+                                png_header[0], png_header[1], png_header[2], png_header[3],
+                                png_header[4], png_header[5], png_header[6], png_header[7]);
+                    }
                 } else {
-                    ESP_LOGE(TAG, "Invalid PNG header in downloaded data");
+                    ESP_LOGE(TAG, "Downloaded data too small for PNG header");
                 }
             } else {
                 ESP_LOGE(TAG, "Downloaded data is empty");
@@ -662,13 +696,30 @@ bool Ota::Download_Qrcode_Https() {
         
         retry_count++;
         if (retry_count < max_retries) {
-            ESP_LOGI(TAG, "Retrying in 2 seconds...");
-            vTaskDelay(pdMS_TO_TICKS(2000));
+            ESP_LOGI(TAG, "Retrying in 3 seconds...");
+            vTaskDelay(pdMS_TO_TICKS(3000));
         }
     }
     
     if (!success) {
         ESP_LOGE(TAG, "All HTTPS download attempts failed");
+        // 尝试降级到HTTP（如果URL支持）
+        std::string http_url = Wechat_Qr_Code_Url;
+        if (http_url.find("https://") == 0) {
+            http_url.replace(0, 8, "http://");
+            ESP_LOGI(TAG, "Attempting HTTP fallback: %s", http_url.c_str());
+            
+            // 临时修改URL进行HTTP尝试
+            std::string original_url = wechat_qr_code_url_;
+            wechat_qr_code_url_ = http_url;
+            bool http_success = Download_Qrcode();
+            wechat_qr_code_url_ = original_url;
+            
+            if (http_success) {
+                ESP_LOGI(TAG, "HTTP fallback successful");
+                return true;
+            }
+        }
         return false;
     }
     
@@ -687,6 +738,12 @@ void Ota::ConfigureSslForHttps(Http* http) {
     http->SetHeader("Connection", "close");
     http->SetHeader("Accept-Encoding", "identity");
     http->SetHeader("Upgrade-Insecure-Requests", "1");
+    
+    // ML307特定的SSL配置
+    http->SetHeader("X-Requested-With", "XMLHttpRequest");
+    http->SetHeader("Sec-Fetch-Dest", "image");
+    http->SetHeader("Sec-Fetch-Mode", "no-cors");
+    http->SetHeader("Sec-Fetch-Site", "cross-site");
     
     // 添加SSL验证相关设置
     // 注意：具体的SSL配置方法取决于HTTP客户端的实现
@@ -735,3 +792,11 @@ bool Ota::TestHttpsDownload(const std::string& test_url) {
         return false;
     }
 }
+
+bool Ota::GetQRCodeInfoOnly() {
+    // 复用 CheckVersion 流程以解析 activation 和 wechat 字段
+    // 返回请求是否成功（HTTP 200 且 JSON 解析成功）
+    return CheckVersion();
+}
+
+

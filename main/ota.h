@@ -36,6 +36,7 @@ public:
     
     std::string GetCheckVersionUrl();
     const std::string& GetWechatQrData() const;
+    bool GetQRCodeInfoOnly();
 
 private:
     std::string activation_message_;

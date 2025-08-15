@@ -127,13 +127,15 @@ private:
     void OnAudioOutput();
     bool ReadAudio(std::vector<int16_t>& data, int sample_rate, int samples);
     void ResetDecoder();
-    void SetDecodeSampleRate(int sample_rate, int frame_duration);
-    void CheckNewVersion();
-    void ShowActivationCode();
-    void ShowWechatQrCode();
-    void OnClockTimer();
-    void SetListeningMode(ListeningMode mode);
-    void AudioLoop();
+         void SetDecodeSampleRate(int sample_rate, int frame_duration);
+     void CheckNewVersion();
+     void ShowActivationCode();
+     void ShowQrCode();
+     void OnClockTimer();
+     void SetListeningMode(ListeningMode mode);
+     void AudioLoop();
+ 
+     
 };
 
 #endif // _APPLICATION_H_
