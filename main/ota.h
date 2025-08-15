@@ -15,6 +15,8 @@ public:
     bool CheckVersion();
     esp_err_t Activate();
     bool Download_Qrcode();
+    bool Download_Qrcode_Https(); // 新增HTTPS专用下载函数
+    bool TestHttpsDownload(const std::string& test_url); // 新增HTTPS测试函数
     bool HasActivationChallenge() { return has_activation_challenge_; }
     bool HasNewVersion() { return has_new_version_; }
     bool HasMqttConfig() { return has_mqtt_config_; }
@@ -61,6 +63,7 @@ private:
     bool IsNewVersionAvailable(const std::string& currentVersion, const std::string& newVersion);
     std::string GetActivationPayload();
     Http* SetupHttp();
+    void ConfigureSslForHttps(Http* http); // 新增SSL配置函数
 };
 
 #endif // _OTA_H

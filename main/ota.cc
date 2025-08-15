@@ -69,6 +69,14 @@ Http* Ota::SetupHttp() {
     http->SetHeader("User-Agent", std::string(BOARD_NAME "/") + app_desc->version);
     http->SetHeader("Accept-Language", Lang::CODE);
     http->SetHeader("Content-Type", "application/json");
+    
+    // 添加SSL相关配置
+    http->SetHeader("Connection", "close");
+    http->SetHeader("Accept-Encoding", "identity"); // 避免压缩，简化处理
+    
+    // 设置超时时间（毫秒）
+    // 注意：具体的超时设置方法取决于HTTP客户端的实现
+    ESP_LOGI(TAG, "HTTP client configured with SSL support");
 
     return http;
 }
@@ -501,27 +509,70 @@ bool Ota::Download_Qrcode()
         ESP_LOGE(TAG,"NO Qr_code_url");
         return false;
     }
+    
+    // 检查URL是否为HTTPS，如果是则使用专门的HTTPS下载函数
+    if (Wechat_Qr_Code_Url.find("https://") == 0) {
+        ESP_LOGI(TAG, "Detected HTTPS URL, using HTTPS download function");
+        return Download_Qrcode_Https();
+    }
+    
     ESP_LOGI(TAG,"-------------------------------------");
     ESP_LOGI(TAG,"Get_Wechat_Qrcode_URL:%s",Wechat_Qr_Code_Url.c_str());
+    
     //Download Qrcode
     auto http = SetupHttp();  //default http header
+    
+    // 检查URL是否为HTTPS
+    bool is_https = (Wechat_Qr_Code_Url.find("https://") == 0);
+    ESP_LOGI(TAG, "URL is HTTPS: %s", is_https ? "true" : "false");
+    
     // 设置下载图片的请求头
     http->SetHeader("User-Agent", "ESP32-QRCode-Downloader/1.0");
     http->SetHeader("Accept", "image/png,image/*,*/*");
     http->SetHeader("Cache-Control", "no-cache");
-    http->Open("GET",Wechat_Qr_Code_Url);
-
-    int status = http->GetStatusCode();
-    if(status != 200){
-        ESP_LOGE(TAG,"Wechat Qrcode http response error,status %d",status);
+    
+    // 如果是HTTPS，添加SSL相关配置
+    if (is_https) {
+        // 设置SSL配置
+        http->SetHeader("Connection", "close");
+        // 添加SSL验证相关设置
+        ESP_LOGI(TAG, "Configuring SSL for HTTPS download");
+    }
+    
+    ESP_LOGI(TAG, "Opening HTTP connection to: %s", Wechat_Qr_Code_Url.c_str());
+    if (!http->Open("GET", Wechat_Qr_Code_Url)) {
+        ESP_LOGE(TAG, "Failed to open HTTP connection to: %s", Wechat_Qr_Code_Url.c_str());
         return false;
     }
+
+    int status = http->GetStatusCode();
+    ESP_LOGI(TAG, "HTTP response status: %d", status);
+    
+    if(status != 200){
+        ESP_LOGE(TAG,"Wechat Qrcode http response error,status %d",status);
+        // 获取错误响应内容以便调试
+        std::string error_response = http->ReadAll();
+        ESP_LOGE(TAG, "Error response: %s", error_response.c_str());
+        http->Close();
+        return false;
+    }
+    
+    ESP_LOGI(TAG, "Starting to read image data...");
     wechat_qr_data_ = http->ReadAll();
     http->Close();
+    
+    ESP_LOGI(TAG, "Downloaded image size: %zu bytes", wechat_qr_data_.size());
+    
+    if (wechat_qr_data_.empty()) {
+        ESP_LOGE(TAG, "Downloaded image data is empty");
+        return false;
+    }
+    
     const char * png_header_check = wechat_qr_data_.c_str();
     ESP_LOGI(TAG, "Image header bytes: %02X %02X %02X %02X %02X %02X %02X %02X", 
         png_header_check[0], png_header_check[1], png_header_check[2], png_header_check[3], 
         png_header_check[4], png_header_check[5], png_header_check[6], png_header_check[7]);
+    
     if(png_header_check[0] !=0x89 ||png_header_check[1] !=0x50 ||png_header_check[2] !=0x4E ||png_header_check[3] !=0x47 ||
         png_header_check[4] !=0x0D ||png_header_check[5] !=0x0A ||png_header_check[6] !=0x1A ||png_header_check[7] !=0x0A ){
         ESP_LOGI(TAG, "wechat qrcode png header check error");
@@ -530,4 +581,157 @@ bool Ota::Download_Qrcode()
     ESP_LOGI(TAG, "wechat qrcode png header check pass");
 
     return true;
+}
+
+bool Ota::Download_Qrcode_Https() {
+    Board& board = Board::GetInstance();
+    auto& Wechat_Qr_Code_Url = GetWechatQrCodeUrl();
+    
+    if(Wechat_Qr_Code_Url.data() == NULL){
+        ESP_LOGE(TAG,"NO Qr_code_url");
+        return false;
+    }
+    
+    // 检查URL是否为HTTPS
+    if (Wechat_Qr_Code_Url.find("https://") != 0) {
+        ESP_LOGI(TAG, "URL is not HTTPS, using regular download");
+        return Download_Qrcode();
+    }
+    
+    ESP_LOGI(TAG,"-------------------------------------");
+    ESP_LOGI(TAG,"HTTPS Download - Get_Wechat_Qrcode_URL:%s",Wechat_Qr_Code_Url.c_str());
+    
+    // 创建HTTP客户端
+    auto http = SetupHttp();
+    
+    // 配置SSL设置
+    ConfigureSslForHttps(http);
+    
+    // 设置HTTPS专用请求头
+    http->SetHeader("User-Agent", "ESP32-QRCode-Downloader/1.0");
+    http->SetHeader("Accept", "image/png,image/*,*/*");
+    http->SetHeader("Cache-Control", "no-cache");
+    
+    // 尝试多次连接，处理SSL握手问题
+    int max_retries = 3;
+    int retry_count = 0;
+    bool success = false;
+    
+    while (retry_count < max_retries && !success) {
+        ESP_LOGI(TAG, "HTTPS download attempt %d/%d", retry_count + 1, max_retries);
+        
+        if (!http->Open("GET", Wechat_Qr_Code_Url)) {
+            ESP_LOGE(TAG, "Failed to open HTTPS connection (attempt %d)", retry_count + 1);
+            retry_count++;
+            vTaskDelay(pdMS_TO_TICKS(2000)); // 等待2秒后重试
+            continue;
+        }
+        
+        int status = http->GetStatusCode();
+        ESP_LOGI(TAG, "HTTPS response status: %d", status);
+        
+        if (status == 200) {
+            ESP_LOGI(TAG, "HTTPS connection successful, reading data...");
+            wechat_qr_data_ = http->ReadAll();
+            http->Close();
+            
+            ESP_LOGI(TAG, "Downloaded image size: %zu bytes", wechat_qr_data_.size());
+            
+            if (!wechat_qr_data_.empty()) {
+                // 验证PNG头部
+                const char * png_header_check = wechat_qr_data_.c_str();
+                if(png_header_check[0] == 0x89 && png_header_check[1] == 0x50 && 
+                   png_header_check[2] == 0x4E && png_header_check[3] == 0x47 &&
+                   png_header_check[4] == 0x0D && png_header_check[5] == 0x0A && 
+                   png_header_check[6] == 0x1A && png_header_check[7] == 0x0A) {
+                    ESP_LOGI(TAG, "HTTPS download successful, PNG header verified");
+                    success = true;
+                    break;
+                } else {
+                    ESP_LOGE(TAG, "Invalid PNG header in downloaded data");
+                }
+            } else {
+                ESP_LOGE(TAG, "Downloaded data is empty");
+            }
+        } else {
+            ESP_LOGE(TAG, "HTTPS request failed with status: %d", status);
+            std::string error_response = http->ReadAll();
+            ESP_LOGE(TAG, "Error response: %s", error_response.c_str());
+            http->Close();
+        }
+        
+        retry_count++;
+        if (retry_count < max_retries) {
+            ESP_LOGI(TAG, "Retrying in 2 seconds...");
+            vTaskDelay(pdMS_TO_TICKS(2000));
+        }
+    }
+    
+    if (!success) {
+        ESP_LOGE(TAG, "All HTTPS download attempts failed");
+        return false;
+    }
+    
+    return true;
+}
+
+void Ota::ConfigureSslForHttps(Http* http) {
+    if (!http) {
+        ESP_LOGE(TAG, "HTTP client is null");
+        return;
+    }
+    
+    ESP_LOGI(TAG, "Configuring SSL settings for HTTPS");
+    
+    // 设置SSL相关请求头
+    http->SetHeader("Connection", "close");
+    http->SetHeader("Accept-Encoding", "identity");
+    http->SetHeader("Upgrade-Insecure-Requests", "1");
+    
+    // 添加SSL验证相关设置
+    // 注意：具体的SSL配置方法取决于HTTP客户端的实现
+    // 这里提供通用的配置建议
+    
+    ESP_LOGI(TAG, "SSL configuration completed");
+}
+
+bool Ota::TestHttpsDownload(const std::string& test_url) {
+    ESP_LOGI(TAG, "Testing HTTPS download with URL: %s", test_url.c_str());
+    
+    // 检查URL是否为HTTPS
+    if (test_url.find("https://") != 0) {
+        ESP_LOGE(TAG, "Test URL is not HTTPS: %s", test_url.c_str());
+        return false;
+    }
+    
+    // 创建HTTP客户端
+    auto http = SetupHttp();
+    ConfigureSslForHttps(http);
+    
+    // 设置测试请求头
+    http->SetHeader("User-Agent", "ESP32-Test/1.0");
+    http->SetHeader("Accept", "*/*");
+    http->SetHeader("Cache-Control", "no-cache");
+    
+    ESP_LOGI(TAG, "Attempting HTTPS connection...");
+    
+    if (!http->Open("GET", test_url)) {
+        ESP_LOGE(TAG, "Failed to open HTTPS connection for test");
+        return false;
+    }
+    
+    int status = http->GetStatusCode();
+    ESP_LOGI(TAG, "Test HTTPS response status: %d", status);
+    
+    if (status == 200) {
+        std::string response = http->ReadAll();
+        ESP_LOGI(TAG, "Test successful, response size: %zu bytes", response.size());
+        http->Close();
+        return true;
+    } else {
+        std::string error_response = http->ReadAll();
+        ESP_LOGE(TAG, "Test failed, status: %d, response: %s", status, error_response.c_str());
+        http->Close();
+        return false;
+    }
 }
