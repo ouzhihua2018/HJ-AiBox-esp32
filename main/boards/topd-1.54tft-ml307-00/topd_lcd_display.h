@@ -1,10 +1,6 @@
 #ifndef TOPD_LCD_DISPLAY_H
 #define TOPD_LCD_DISPLAY_H
 
-#include <vector>
-#include <string>
-#include <cstdint>
-#include <memory>
 #include <libs/gif/lv_gif.h>
 
 #include "display/lcd_display.h"
@@ -64,7 +60,8 @@ public:
             lv_obj_add_flag(high_temp_popup_, LV_OBJ_FLAG_HIDDEN);
         }
     } 
-
+    virtual void SwitchToGifContainer() override;
+    virtual void SwitchToActivationStatusContainer() override;
 public:
      /**
      * @brief 构造函数，参数与SpiLcdDisplay相同
@@ -83,39 +80,14 @@ public:
 
     // 添加SetIcon方法声明
     virtual void SetIcon(const char* icon) override; 
-    
-    // 新增：显示二维码接口，qrUrl 为二维码链接
-    virtual void ShowQRCode(const std::string& qrUrl);
-    // 新增：显示二维码图片数据
-    virtual bool ShowQRCodeImage(const uint8_t* image_data, size_t data_size);
-    // 新增：隐藏二维码显示
-    virtual void HideQRCode();
-    // 新增：测试指定的二维码URL
-    virtual void TestQRCodeUrl();
-   
+
+    // 设置二维码显示
+    virtual void SetWechatQrcodeImage(const lv_img_dsc_t* img_dsc) override;
+    //otto 新增函数
 private:
-    // QR码显示相关方法
-    void ShowQRError();
-    void DisplayQRImage(const std::vector<uint8_t>& image_data);
-    void SetupGifContainer();
-    void InitQrImage();
     
     lv_obj_t* emotion_gif_;  ///< GIF表情组件 >
-    lv_obj_t* qr_container_ = nullptr;  ///< 二维码显示容器
-    lv_obj_t* qr_img_obj_ = nullptr;    ///< 二维码图片对象
-    lv_obj_t* qr_screen_ = nullptr;     ///< 专用二维码屏幕（避免被其他UI覆盖）
-    lv_obj_t* prev_screen_ = nullptr;   ///< 切换前的屏幕
-    
-    // QR码图片数据管理（暂时保留用于未来扩展）
-    std::unique_ptr<std::vector<uint16_t>> qr_rgb565_data_;  ///< RGB565图片数据
-
-    // 保存一份可供 lv_img 使用的图片描述符
-    lv_img_dsc_t qr_img_dsc_{};
-    bool qr_img_ready_ = false;
-
-    // 保存原始PNG数据（用于LVGL的RAW解码器）
-    std::vector<uint8_t> qr_png_data_;
-
+    lv_obj_t* qr_image_object_ = nullptr;
     // 表情映射
     struct EmotionMap {
         const char* name;
