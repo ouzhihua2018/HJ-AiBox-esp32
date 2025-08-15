@@ -107,7 +107,7 @@ void Application::CheckNewVersion() {
     while (true) {
         SetDeviceState(kDeviceStateActivating);
         auto display = Board::GetInstance().GetDisplay();
-        //display->SetStatus(Lang::Strings::CHECKING_NEW_VERSION);
+        display->SetStatus(Lang::Strings::CHECKING_NEW_VERSION);
 
         if (!ota_.CheckVersion()) {
             retry_count++;
@@ -140,9 +140,9 @@ void Application::CheckNewVersion() {
 
             SetDeviceState(kDeviceStateUpgrading);
             
-            //display->SetIcon(FONT_AWESOME_DOWNLOAD);
-            //std::string message = std::string(Lang::Strings::NEW_VERSION) + ota_.GetFirmwareVersion();
-            //display->SetChatMessage("system", message.c_str());
+            display->SetIcon(FONT_AWESOME_DOWNLOAD);
+            std::string message = std::string(Lang::Strings::NEW_VERSION) + ota_.GetFirmwareVersion();
+            display->SetChatMessage("system", message.c_str());
 
             auto& board = Board::GetInstance();
             board.SetPowerSaveMode(false);
@@ -163,11 +163,11 @@ void Application::CheckNewVersion() {
             ota_.StartUpgrade([display](int progress, size_t speed) {
                 char buffer[64];
                 snprintf(buffer, sizeof(buffer), "%d%% %uKB/s", progress, speed / 1024);
-                //display->SetChatMessage("system", buffer);
+                display->SetChatMessage("system", buffer);
             });
 
             // If upgrade success, the device will reboot and never reach here
-            //display->SetStatus(Lang::Strings::UPGRADE_FAILED);
+            display->SetStatus(Lang::Strings::UPGRADE_FAILED);
             ESP_LOGI(TAG, "Firmware upgrade failed...");
             vTaskDelay(pdMS_TO_TICKS(3000));
             Reboot();
@@ -179,10 +179,14 @@ void Application::CheckNewVersion() {
         
         // 是否已激活判断
         if (!ota_.HasActivationCode() && !ota_.HasActivationChallenge()) {
+            //已激活，保持当前界面继续执行
             xEventGroupSetBits(event_group_, CHECK_NEW_VERSION_DONE_EVENT);
             // Exit the loop if done checking new version
             break;
         }
+        // 未激活，开始激活，界面切换
+        display->SwitchToActivationStatusContainer();
+      
         ESP_LOGW(TAG,"ota_.HasWeChatQrCodeUrl():%d",ota_.HasWeChatQrCodeUrl());
         // QrCode is shown to the user and waiting for the user to input
         if (ota_.HasWeChatQrCodeUrl()) {
@@ -196,9 +200,7 @@ void Application::CheckNewVersion() {
             esp_err_t err = ota_.Activate();
             if (err == ESP_OK) {
                 xEventGroupSetBits(event_group_, CHECK_NEW_VERSION_DONE_EVENT);
-                ESP_LOGI(TAG, "Activation successful,restart after 3 seconds");
-                vTaskDelay(pdMS_TO_TICKS(3000));
-                Reboot();
+                ESP_LOGI(TAG, "Activation successful!");
                 break;
             } else if (err == ESP_ERR_TIMEOUT) {
                 vTaskDelay(pdMS_TO_TICKS(3000));
@@ -415,7 +417,7 @@ void Application::Start() {
     /* Setup the display */
     ESP_LOGI(TAG,"GetDisplay");
     auto display = board.GetDisplay();
-
+    
     /* Setup the audio codec */
     ESP_LOGI(TAG,"audio start");
     auto codec = board.GetAudioCodec();

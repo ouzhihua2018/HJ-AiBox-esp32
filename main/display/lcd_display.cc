@@ -662,7 +662,7 @@ void LcdDisplay::SetupUI() {
     lv_obj_set_style_pad_column(status_bar_, 0, 0);
     lv_obj_set_style_pad_left(status_bar_, 2, 0);
     lv_obj_set_style_pad_right(status_bar_, 2, 0);
-
+    //status_bar content
     network_label_ = lv_label_create(status_bar_);
     lv_label_set_text(network_label_, "");
     lv_obj_set_style_text_font(network_label_, fonts_.icon_font, 0);

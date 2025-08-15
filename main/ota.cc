@@ -484,11 +484,11 @@ esp_err_t Ota::Activate() {
         ESP_LOGE(TAG, "Failed to activate, code: %d, body: %s", status_code, http->ReadAll().c_str());
         return ESP_FAIL;
     }
-    //激活成功
-    Settings settings("board", true);
-    settings.SetInt("has_activation",true);
+     // 激活成功，界面切换
+    Board& board=Board::GetInstance();
+    Display* display= board.GetDisplay();
+    display->SwitchToGifContainer();
     
-    //ESP_LOGI(TAG, "Activation successful");
     return ESP_OK;
 }
 

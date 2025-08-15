@@ -59,14 +59,15 @@ TopdEmojiDisplay::TopdEmojiDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_p
       emotion_gif_(nullptr) {
     ESP_LOGI(TAG,"TopdDisplay construct");
    
-    if(Board::GetActivationStatus()){
-        SetupGifContainer(); 
-        ESP_LOGI(TAG,"SetupGifContainer();");
-    } else SetupActivationStatusContainer();
+    
+    SwitchToGifContainer(); 
+    ESP_LOGI(TAG,"SetupGifContainer();");
+    
    
 };
 
-void TopdEmojiDisplay::SetupGifContainer() {
+void TopdEmojiDisplay::SwitchToGifContainer() {
+    ESP_LOGI(TAG,"Switch To Gif Container");
     DisplayLockGuard lock(this);
     SetupHighTempWarningPopup();
     if (emotion_label_) {
@@ -79,7 +80,10 @@ void TopdEmojiDisplay::SetupGifContainer() {
     if (content_) {
         lv_obj_del(content_);
     }
-
+    if (qr_image_object_) {
+        lv_obj_del(qr_image_object_);
+    }
+    
     content_ = lv_obj_create(container_);
     lv_obj_set_scrollbar_mode(content_, LV_SCROLLBAR_MODE_OFF);
     lv_obj_set_size(content_, LV_HOR_RES, LV_HOR_RES);
@@ -119,14 +123,19 @@ void TopdEmojiDisplay::SetupGifContainer() {
     LcdDisplay::SetTheme("dark");
 }
 
-void TopdEmojiDisplay::SetupActivationStatusContainer()
+void TopdEmojiDisplay::SwitchToActivationStatusContainer()
 {   
-    ESP_LOGI(TAG,"SetupActivationStatusContainer;");
+    ESP_LOGI(TAG,"Switch To Activation Status Container");
     DisplayLockGuard lock(this);
     
     if (emotion_label_) {
         lv_obj_del(emotion_label_);
         emotion_label_=nullptr;
+    }
+
+    if (emotion_gif_) {
+        lv_obj_del(emotion_gif_);
+        emotion_gif_=nullptr;
     }
 
     if (chat_message_label_) {

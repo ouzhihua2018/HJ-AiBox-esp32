@@ -60,7 +60,8 @@ public:
             lv_obj_add_flag(high_temp_popup_, LV_OBJ_FLAG_HIDDEN);
         }
     } 
-
+    virtual void SwitchToGifContainer() override;
+    virtual void SwitchToActivationStatusContainer() override;
 public:
      /**
      * @brief 构造函数，参数与SpiLcdDisplay相同
@@ -84,8 +85,7 @@ public:
     virtual void SetWechatQrcodeImage(const lv_img_dsc_t* img_dsc) override;
     //otto 新增函数
 private:
-    void SetupGifContainer();
-    void SetupActivationStatusContainer();
+    
     lv_obj_t* emotion_gif_;  ///< GIF表情组件 >
     lv_obj_t* qr_image_object_ = nullptr;
     // 表情映射
