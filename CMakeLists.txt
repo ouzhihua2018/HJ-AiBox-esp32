@@ -2,7 +2,7 @@
 # https://docs.espressif.com/projects/esp-idf/en/latest/api-guides/build-system.html
 # The following five lines of boilerplate have to be in your project's
 # CMakeLists in this exact order for cmake to work correctly
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.16) # 全局变量版本
 
 set(PROJECT_VER "1.7.2")
 
@@ -10,5 +10,5 @@ set(PROJECT_VER "1.7.2")
 add_compile_options(-Wno-missing-field-initializers)
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
-project(xiaozhi)
+project(xiaozhi) # 生成bin文件的名称，项目名称，最关键的内容
 
