@@ -213,6 +213,10 @@ void Application::CheckNewVersion() {
                     // 如果不再有激活码和激活挑战，说明设备已关联
                     if (!ota_.HasActivationCode() && !ota_.HasActivationChallenge()) {
                         ESP_LOGI(TAG, "Device association detected!");
+                        
+                        // 激活成功，刷新页面并进入正常对话界面
+                        RefreshToNormalInterface();
+                        
                         xEventGroupSetBits(event_group_, CHECK_NEW_VERSION_DONE_EVENT);
                         break;
                     }
@@ -242,8 +246,12 @@ void Application::CheckNewVersion() {
                 
                 esp_err_t err = ota_.Activate();
                 if (err == ESP_OK) {
-                    xEventGroupSetBits(event_group_, CHECK_NEW_VERSION_DONE_EVENT);
                     ESP_LOGI(TAG, "Activation successful!");
+                    
+                    // 激活成功，刷新页面并进入正常对话界面
+                    RefreshToNormalInterface();
+                    
+                    xEventGroupSetBits(event_group_, CHECK_NEW_VERSION_DONE_EVENT);
                     break;
                 } else if (err == ESP_ERR_TIMEOUT) {
                     ESP_LOGI(TAG, "Activation timeout, retrying in %d seconds", ACTIVATION_TIMEOUT_SEC);
@@ -300,7 +308,7 @@ void Application::ShowQrCode() {
     //Download Qrcode
     if(!ota_.Download_Qrcode()){
         ESP_LOGE(TAG,"wechat_qrcode_download_fail");
-        return ;
+        return;
     }
     ESP_LOGI(TAG,"=============================================");
     ESP_LOGI(TAG,"The QR code was successfully downloaded.");
@@ -1164,6 +1172,32 @@ void Application::SetAecMode(AecMode mode) {
             protocol_->CloseAudioChannel();
         }
     });
+}
+
+void Application::RefreshToNormalInterface() {
+    ESP_LOGI(TAG, "Refreshing to normal interface after activation");
+    
+    auto& board = Board::GetInstance();
+    auto display = board.GetDisplay();
+    
+    // 设置设备状态为空闲
+    SetDeviceState(kDeviceStateIdle);
+    
+    // 切换到正常对话界面
+    display->SwitchToGifContainer();
+    
+    // 设置正常状态显示
+    display->SetStatus(Lang::Strings::STANDBY);
+    display->SetEmotion("neutral");
+    display->SetChatMessage("system", "");
+    
+    // 播放激活成功提示音
+    PlaySound(Lang::Sounds::P3_SUCCESS);
+    
+    // 显示激活成功通知
+    display->ShowNotification("设备激活成功！", 3000);
+    
+    ESP_LOGI(TAG, "Normal interface refresh completed");
 }
 
 

@@ -616,7 +616,7 @@ bool Ota::Download_Qrcode_Https() {
     http->SetHeader("Cache-Control", "no-cache");
     
     // 尝试多次连接，处理SSL握手问题
-    int max_retries = 5; // 增加重试次数
+    int max_retries = 8; // 增加重试次数
     int retry_count = 0;
     bool success = false;
     
@@ -625,12 +625,12 @@ bool Ota::Download_Qrcode_Https() {
         
         // 在每次重试前重置连接
         http->Close();
-        vTaskDelay(pdMS_TO_TICKS(1000)); // 等待1秒
+        vTaskDelay(pdMS_TO_TICKS(2000)); // 增加等待时间到2秒
         
         if (!http->Open("GET", Wechat_Qr_Code_Url)) {
             ESP_LOGE(TAG, "Failed to open HTTPS connection (attempt %d)", retry_count + 1);
             retry_count++;
-            vTaskDelay(pdMS_TO_TICKS(3000)); // 增加等待时间到3秒
+            vTaskDelay(pdMS_TO_TICKS(5000)); // 增加等待时间到5秒
             continue;
         }
         
@@ -696,8 +696,9 @@ bool Ota::Download_Qrcode_Https() {
         
         retry_count++;
         if (retry_count < max_retries) {
-            ESP_LOGI(TAG, "Retrying in 3 seconds...");
-            vTaskDelay(pdMS_TO_TICKS(3000));
+            int delay_seconds = 3 + (retry_count * 2); // 指数退避：3, 5, 7, 9, 11, 13, 15秒
+            ESP_LOGI(TAG, "Retrying in %d seconds...", delay_seconds);
+            vTaskDelay(pdMS_TO_TICKS(delay_seconds * 1000));
         }
     }
     
@@ -720,6 +721,9 @@ bool Ota::Download_Qrcode_Https() {
                 return true;
             }
         }
+        
+        // 如果HTTP降级也失败，返回失败
+        ESP_LOGW(TAG, "Both HTTPS and HTTP download failed");
         return false;
     }
     
@@ -734,22 +738,20 @@ void Ota::ConfigureSslForHttps(Http* http) {
     
     ESP_LOGI(TAG, "Configuring SSL settings for HTTPS");
     
-    // 设置SSL相关请求头
+    // 设置SSL相关请求头 - 简化配置，减少SSL握手复杂度
     http->SetHeader("Connection", "close");
-    http->SetHeader("Accept-Encoding", "identity");
-    http->SetHeader("Upgrade-Insecure-Requests", "1");
+    http->SetHeader("Accept-Encoding", "identity"); // 避免压缩
+    http->SetHeader("Accept", "image/png,image/*,*/*");
+    http->SetHeader("User-Agent", "ESP32-ML307/1.0");
     
-    // ML307特定的SSL配置
-    http->SetHeader("X-Requested-With", "XMLHttpRequest");
-    http->SetHeader("Sec-Fetch-Dest", "image");
-    http->SetHeader("Sec-Fetch-Mode", "no-cors");
-    http->SetHeader("Sec-Fetch-Site", "cross-site");
+    // 移除可能导致SSL问题的头部
+    // http->SetHeader("Upgrade-Insecure-Requests", "1"); // 移除这个头部
+    // http->SetHeader("X-Requested-With", "XMLHttpRequest"); // 移除这个头部
+    // http->SetHeader("Sec-Fetch-Dest", "image"); // 移除这个头部
+    // http->SetHeader("Sec-Fetch-Mode", "no-cors"); // 移除这个头部
+    // http->SetHeader("Sec-Fetch-Site", "cross-site"); // 移除这个头部
     
-    // 添加SSL验证相关设置
-    // 注意：具体的SSL配置方法取决于HTTP客户端的实现
-    // 这里提供通用的配置建议
-    
-    ESP_LOGI(TAG, "SSL configuration completed");
+    ESP_LOGI(TAG, "SSL configuration completed - simplified for ML307 compatibility");
 }
 
 bool Ota::TestHttpsDownload(const std::string& test_url) {
@@ -798,5 +800,7 @@ bool Ota::GetQRCodeInfoOnly() {
     // 返回请求是否成功（HTTP 200 且 JSON 解析成功）
     return CheckVersion();
 }
+
+
 
 

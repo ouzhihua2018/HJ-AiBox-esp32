@@ -132,8 +132,9 @@ private:
      void ShowActivationCode();
      void ShowQrCode();
      void OnClockTimer();
-     void SetListeningMode(ListeningMode mode);
-     void AudioLoop();
+         void SetListeningMode(ListeningMode mode);
+    void AudioLoop();
+    void RefreshToNormalInterface();
  
      
 };
