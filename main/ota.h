@@ -16,7 +16,6 @@ public:
     esp_err_t Activate();
     bool Download_Qrcode();
     bool Download_Qrcode_Https(); // 新增HTTPS专用下载函数
-    bool TestHttpsDownload(const std::string& test_url); // 新增HTTPS测试函数
     bool HasActivationChallenge() { return has_activation_challenge_; }
     bool HasNewVersion() { return has_new_version_; }
     bool HasMqttConfig() { return has_mqtt_config_; }
@@ -37,6 +36,8 @@ public:
     std::string GetCheckVersionUrl();
     const std::string& GetWechatQrData() const;
     bool GetQRCodeInfoOnly();
+
+    void ConfigureMl307SslProtocol(); // 新增ML307 SSL协议配置函数
 
 private:
     std::string activation_message_;
