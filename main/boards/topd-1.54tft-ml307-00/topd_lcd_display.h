@@ -5,7 +5,7 @@
 
 #include "display/lcd_display.h"
 //#include <esp_lvgl_port.h>
-#include "otto_emoji_gif.h"
+#include "emoji/topd_emoji_gif.h"
 
 class TopdEmojiDisplay : public SpiLcdDisplay {
 
