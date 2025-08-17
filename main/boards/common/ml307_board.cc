@@ -4,20 +4,14 @@
 #include "display.h"
 #include "font_awesome_symbols.h"
 #include "assets/lang_config.h"
-#include "settings.h"
 
 #include <esp_log.h>
 #include <esp_timer.h>
-#include <ml307_http.h>
-#include <ml307_ssl_transport.h>
-#include <web_socket.h>
-#include <ml307_mqtt.h>
-#include <ml307_udp.h>
 #include <opus_encoder.h>
 
 static const char *TAG = "Ml307Board";
 
-Ml307Board::Ml307Board(gpio_num_t tx_pin, gpio_num_t rx_pin, size_t rx_buffer_size) : modem_(tx_pin, rx_pin, rx_buffer_size) {
+Ml307Board::Ml307Board(gpio_num_t tx_pin, gpio_num_t rx_pin, gpio_num_t dtr_pin) : tx_pin_(tx_pin), rx_pin_(rx_pin), dtr_pin_(dtr_pin) {
 }
 
 std::string Ml307Board::GetBoardType() {
@@ -25,115 +19,64 @@ std::string Ml307Board::GetBoardType() {
 }
 
 void Ml307Board::StartNetwork() {
+    auto& application = Application::GetInstance();
     auto display = Board::GetInstance().GetDisplay();
     display->SetStatus(Lang::Strings::DETECTING_MODULE);
-    modem_.SetDebug(false);
-    modem_.SetBaudRate(921600);
 
-    auto& application = Application::GetInstance();
-    // If low power, the material ready event will be triggered by the modem because of a reset
-    modem_.OnMaterialReady([this, &application]() {
-        ESP_LOGI(TAG, "ML307 material ready");
-        application.Schedule([this, &application]() {
-            application.SetDeviceState(kDeviceStateIdle);
-            // 模块上电就绪后，优先配置 APN 并拨号
-            Settings settings("ml307", false);
-            std::string apn = settings.GetString("apn");
-            std::string apn_user = settings.GetString("apn_user");
-            std::string apn_pass = settings.GetString("apn_pass");
-
-            if (!apn.empty()) {
-                // 设置 PDP 上下文 APN
-                modem_.Command(std::string("AT+CGDCONT=1,\"IP\",\"") + apn + "\"");
-            }
-            // 触发拨号，优先无参拨号；部分固件也支持带参拨号
-            if (!modem_.Command("AT+MIPCALL=1", 10000)) {
-                if (!apn.empty()) {
-                    std::string dial = std::string("AT+MIPCALL=1,\"") + apn + "\",\"" + apn_user + "\",\"" + apn_pass + "\"";
-                    modem_.Command(dial, 15000);
-                }
-            }
-            WaitForNetworkReady();
-        });
-    });
-
-    // 上电后立即尝试配置 APN 并拨号，避免仅查询状态
-    {
-        Settings settings("ml307", false);
-        std::string apn = settings.GetString("apn");
-        std::string apn_user = settings.GetString("apn_user");
-        std::string apn_pass = settings.GetString("apn_pass");
-        if (apn.empty()) {
-            // 基于常见运营商的默认APN做兜底（可被NVS中的ml307/apn覆盖）
-            std::string carrier = modem_.GetCarrierName();
-            if (carrier.find("MOBILE") != std::string::npos || carrier.find("CMCC") != std::string::npos) {
-                apn = "CMNET"; // 中国移动
-            } else if (carrier.find("UNICOM") != std::string::npos || carrier.find("CUCC") != std::string::npos) {
-                apn = "3GNET"; // 中国联通
-            } else if (carrier.find("TELECOM") != std::string::npos || carrier.find("CT") != std::string::npos) {
-                apn = "CTNET"; // 中国电信
-            }
+    while (true) {
+        modem_ = AtModem::Detect(tx_pin_, rx_pin_, dtr_pin_, 921600);
+        if (modem_ != nullptr) {
+            break;
         }
-        if (!apn.empty()) {
-            modem_.Command(std::string("AT+CGDCONT=1,\"IP\",\"") + apn + "\"");
-        }
-        if (!modem_.Command("AT+MIPCALL=1", 10000)) {
-            if (!apn.empty()) {
-                std::string dial = std::string("AT+MIPCALL=1,\"") + apn + "\",\"" + apn_user + "\",\"" + apn_pass + "\"";
-                modem_.Command(dial, 15000);
-            }
-        }
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 
-    WaitForNetworkReady();
-}
+    modem_->OnNetworkStateChanged([this, &application](bool network_ready) {
+        if (network_ready) {
+            ESP_LOGI(TAG, "Network is ready");
+        } else {
+            ESP_LOGE(TAG, "Network is down");
+            auto device_state = application.GetDeviceState();
+            if (device_state == kDeviceStateListening || device_state == kDeviceStateSpeaking) {
+                application.Schedule([this, &application]() {
+                    application.SetDeviceState(kDeviceStateIdle);
+                });
+            }
+        }
+    });
 
-void Ml307Board::WaitForNetworkReady() {
-    auto& application = Application::GetInstance();
-    auto display = Board::GetInstance().GetDisplay();
+    // Wait for network ready
     display->SetStatus(Lang::Strings::REGISTERING_NETWORK);
-    int result = modem_.WaitForNetworkReady();
-    if (result == -1) {
-        application.Alert(Lang::Strings::ERROR, Lang::Strings::PIN_ERROR, "sad", Lang::Sounds::P3_ERR_PIN);
-        return;
-    } else if (result == -2) {
-        application.Alert(Lang::Strings::ERROR, Lang::Strings::REG_ERROR, "sad", Lang::Sounds::P3_ERR_REG);
-        return;
+    while (true) {
+        auto result = modem_->WaitForNetworkReady();
+        if (result == NetworkStatus::ErrorInsertPin) {
+            application.Alert(Lang::Strings::ERROR, Lang::Strings::PIN_ERROR, "sad", Lang::Sounds::OGG_ERR_PIN);
+        } else if (result == NetworkStatus::ErrorRegistrationDenied) {
+            application.Alert(Lang::Strings::ERROR, Lang::Strings::REG_ERROR, "sad", Lang::Sounds::OGG_ERR_REG);
+        } else {
+            break;
+        }
+        vTaskDelay(pdMS_TO_TICKS(10000));
     }
 
     // Print the ML307 modem information
-    std::string module_name = modem_.GetModuleName();
-    std::string imei = modem_.GetImei();
-    std::string iccid = modem_.GetIccid();
-    ESP_LOGI(TAG, "ML307 Module: %s", module_name.c_str());
+    std::string module_revision = modem_->GetModuleRevision();
+    std::string imei = modem_->GetImei();
+    std::string iccid = modem_->GetIccid();
+    ESP_LOGI(TAG, "ML307 Revision: %s", module_revision.c_str());
     ESP_LOGI(TAG, "ML307 IMEI: %s", imei.c_str());
     ESP_LOGI(TAG, "ML307 ICCID: %s", iccid.c_str());
-
-    // Close all previous connections
-    modem_.ResetConnections();
 }
 
-Http* Ml307Board::CreateHttp() {
-    return new Ml307Http(modem_);
-}
-
-WebSocket* Ml307Board::CreateWebSocket() {
-    return new WebSocket(new Ml307SslTransport(modem_, 0));
-}
-
-Mqtt* Ml307Board::CreateMqtt() {
-    return new Ml307Mqtt(modem_, 0);
-}
-
-Udp* Ml307Board::CreateUdp() {
-    return new Ml307Udp(modem_, 0);
+NetworkInterface* Ml307Board::GetNetwork() {
+    return modem_.get();
 }
 
 const char* Ml307Board::GetNetworkStateIcon() {
-    if (!modem_.network_ready()) {
+    if (modem_ == nullptr || !modem_->network_ready()) {
         return FONT_AWESOME_SIGNAL_OFF;
     }
-    int csq = modem_.GetCsq();
+    int csq = modem_->GetCsq();
     if (csq == -1) {
         return FONT_AWESOME_SIGNAL_OFF;
     } else if (csq >= 0 && csq <= 14) {
@@ -154,12 +97,12 @@ std::string Ml307Board::GetBoardJson() {
     // Set the board type for OTA
     std::string board_json = std::string("{\"type\":\"" BOARD_TYPE "\",");
     board_json += "\"name\":\"" BOARD_NAME "\",";
-    board_json += "\"revision\":\"" + modem_.GetModuleName() + "\",";
-    board_json += "\"carrier\":\"" + modem_.GetCarrierName() + "\",";
-    board_json += "\"csq\":\"" + std::to_string(modem_.GetCsq()) + "\",";
-    board_json += "\"imei\":\"" + modem_.GetImei() + "\",";
-    board_json += "\"iccid\":\"" + modem_.GetIccid() + "\",";
-    board_json += "\"cereg\":" + modem_.GetRegistrationState().ToString() + "}";
+    board_json += "\"revision\":\"" + modem_->GetModuleRevision() + "\",";
+    board_json += "\"carrier\":\"" + modem_->GetCarrierName() + "\",";
+    board_json += "\"csq\":\"" + std::to_string(modem_->GetCsq()) + "\",";
+    board_json += "\"imei\":\"" + modem_->GetImei() + "\",";
+    board_json += "\"iccid\":\"" + modem_->GetIccid() + "\",";
+    board_json += "\"cereg\":" + modem_->GetRegistrationState().ToString() + "}";
     return board_json;
 }
 
@@ -228,8 +171,8 @@ std::string Ml307Board::GetDeviceStatusJson() {
     // Network
     auto network = cJSON_CreateObject();
     cJSON_AddStringToObject(network, "type", "cellular");
-    cJSON_AddStringToObject(network, "carrier", modem_.GetCarrierName().c_str());
-    int csq = modem_.GetCsq();
+    cJSON_AddStringToObject(network, "carrier", modem_->GetCarrierName().c_str());
+    int csq = modem_->GetCsq();
     if (csq == -1) {
         cJSON_AddStringToObject(network, "signal", "unknown");
     } else if (csq >= 0 && csq <= 14) {
