@@ -1,0 +1,17 @@
+--2025-08-19 13:11:17--  https://github.com/espressif/esp-idf/releases/download/v5.4.0/esp-idf-tools-setup-online-v5.4.0.run
+Resolving github.com (github.com)... 20.205.243.166
+Connecting to github.com (github.com)|20.205.243.166|:443... connected.
+HTTP request sent, awaiting response... No data received.
+Retrying.
+
+--2025-08-19 13:12:49--  (try: 2)  https://github.com/espressif/esp-idf/releases/download/v5.4.0/esp-idf-tools-setup-online-v5.4.0.run
+Connecting to github.com (github.com)|20.205.243.166|:443... failed: Connection timed out.
+Resolving github.com (github.com)... 20.205.243.166
+Connecting to github.com (github.com)|20.205.243.166|:443... failed: Connection timed out.
+Retrying.
+
+--2025-08-19 13:17:20--  (try: 3)  https://github.com/espressif/esp-idf/releases/download/v5.4.0/esp-idf-tools-setup-online-v5.4.0.run
+Connecting to github.com (github.com)|20.205.243.166|:443... connected.
+HTTP request sent, awaiting response... 404 Not Found
+2025-08-19 13:17:21 ERROR 404: Not Found.
+
