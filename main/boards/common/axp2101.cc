@@ -30,8 +30,7 @@ int Axp2101::GetBatteryLevel() {
     return ReadReg(0xA4);
 }
 
-
-float Axp2101::GetESP32Temp() {
+float Axp2101::GetTemperature() {
     return ReadReg(0xA5);
 }
 

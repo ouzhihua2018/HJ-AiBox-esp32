@@ -4,6 +4,7 @@
 #include "display.h"
 #include "font_awesome_symbols.h"
 #include "assets/lang_config.h"
+#include "settings.h"
 
 #include <esp_log.h>
 #include <esp_timer.h>
@@ -35,9 +36,54 @@ void Ml307Board::StartNetwork() {
         ESP_LOGI(TAG, "ML307 material ready");
         application.Schedule([this, &application]() {
             application.SetDeviceState(kDeviceStateIdle);
+            // 模块上电就绪后，优先配置 APN 并拨号
+            Settings settings("ml307", false);
+            std::string apn = settings.GetString("apn");
+            std::string apn_user = settings.GetString("apn_user");
+            std::string apn_pass = settings.GetString("apn_pass");
+
+            if (!apn.empty()) {
+                // 设置 PDP 上下文 APN
+                modem_.Command(std::string("AT+CGDCONT=1,\"IP\",\"") + apn + "\"");
+            }
+            // 触发拨号，优先无参拨号；部分固件也支持带参拨号
+            if (!modem_.Command("AT+MIPCALL=1", 10000)) {
+                if (!apn.empty()) {
+                    std::string dial = std::string("AT+MIPCALL=1,\"") + apn + "\",\"" + apn_user + "\",\"" + apn_pass + "\"";
+                    modem_.Command(dial, 15000);
+                }
+            }
             WaitForNetworkReady();
         });
     });
+
+    // 上电后立即尝试配置 APN 并拨号，避免仅查询状态
+    {
+        Settings settings("ml307", false);
+        std::string apn = settings.GetString("apn");
+        std::string apn_user = settings.GetString("apn_user");
+        std::string apn_pass = settings.GetString("apn_pass");
+        if (apn.empty()) {
+            // 基于常见运营商的默认APN做兜底（可被NVS中的ml307/apn覆盖）
+            std::string carrier = modem_.GetCarrierName();
+            if (carrier.find("MOBILE") != std::string::npos || carrier.find("CMCC") != std::string::npos) {
+                apn = "CMNET"; // 中国移动
+            } else if (carrier.find("UNICOM") != std::string::npos || carrier.find("CUCC") != std::string::npos) {
+                apn = "3GNET"; // 中国联通
+            } else if (carrier.find("TELECOM") != std::string::npos || carrier.find("CT") != std::string::npos) {
+                apn = "CTNET"; // 中国电信
+            }
+        }
+        if (!apn.empty()) {
+            modem_.Command(std::string("AT+CGDCONT=1,\"IP\",\"") + apn + "\"");
+        }
+        if (!modem_.Command("AT+MIPCALL=1", 10000)) {
+            if (!apn.empty()) {
+                std::string dial = std::string("AT+MIPCALL=1,\"") + apn + "\",\"" + apn_user + "\",\"" + apn_pass + "\"";
+                modem_.Command(dial, 15000);
+            }
+        }
+    }
 
     WaitForNetworkReady();
 }
@@ -112,10 +158,94 @@ std::string Ml307Board::GetBoardJson() {
     board_json += "\"carrier\":\"" + modem_.GetCarrierName() + "\",";
     board_json += "\"csq\":\"" + std::to_string(modem_.GetCsq()) + "\",";
     board_json += "\"imei\":\"" + modem_.GetImei() + "\",";
-    board_json += "\"iccid\":\"" + modem_.GetIccid() + "\"}";
+    board_json += "\"iccid\":\"" + modem_.GetIccid() + "\",";
+    board_json += "\"cereg\":" + modem_.GetRegistrationState().ToString() + "}";
     return board_json;
 }
 
 void Ml307Board::SetPowerSaveMode(bool enabled) {
     // TODO: Implement power save mode for ML307
+}
+
+std::string Ml307Board::GetDeviceStatusJson() {
+    /*
+     * 返回设备状态JSON
+     * 
+     * 返回的JSON结构如下：
+     * {
+     *     "audio_speaker": {
+     *         "volume": 70
+     *     },
+     *     "screen": {
+     *         "brightness": 100,
+     *         "theme": "light"
+     *     },
+     *     "battery": {
+     *         "level": 50,
+     *         "charging": true
+     *     },
+     *     "network": {
+     *         "type": "cellular",
+     *         "carrier": "CHINA MOBILE",
+     *         "csq": 10
+     *     }
+     * }
+     */
+    auto& board = Board::GetInstance();
+    auto root = cJSON_CreateObject();
+
+    // Audio speaker
+    auto audio_speaker = cJSON_CreateObject();
+    auto audio_codec = board.GetAudioCodec();
+    if (audio_codec) {
+        cJSON_AddNumberToObject(audio_speaker, "volume", audio_codec->output_volume());
+    }
+    cJSON_AddItemToObject(root, "audio_speaker", audio_speaker);
+
+    // Screen brightness
+    auto backlight = board.GetBacklight();
+    auto screen = cJSON_CreateObject();
+    if (backlight) {
+        cJSON_AddNumberToObject(screen, "brightness", backlight->brightness());
+    }
+    auto display = board.GetDisplay();
+    if (display && display->height() > 64) { // For LCD display only
+        cJSON_AddStringToObject(screen, "theme", display->GetTheme().c_str());
+    }
+    cJSON_AddItemToObject(root, "screen", screen);
+
+    // Battery
+    int battery_level = 0;
+    bool charging = false;
+    bool discharging = false;
+    if (board.GetBatteryLevel(battery_level, charging, discharging)) {
+        cJSON* battery = cJSON_CreateObject();
+        cJSON_AddNumberToObject(battery, "level", battery_level);
+        cJSON_AddBoolToObject(battery, "charging", charging);
+        cJSON_AddItemToObject(root, "battery", battery);
+    }
+
+    // Network
+    auto network = cJSON_CreateObject();
+    cJSON_AddStringToObject(network, "type", "cellular");
+    cJSON_AddStringToObject(network, "carrier", modem_.GetCarrierName().c_str());
+    int csq = modem_.GetCsq();
+    if (csq == -1) {
+        cJSON_AddStringToObject(network, "signal", "unknown");
+    } else if (csq >= 0 && csq <= 14) {
+        cJSON_AddStringToObject(network, "signal", "very weak");
+    } else if (csq >= 15 && csq <= 19) {
+        cJSON_AddStringToObject(network, "signal", "weak");
+    } else if (csq >= 20 && csq <= 24) {
+        cJSON_AddStringToObject(network, "signal", "medium");
+    } else if (csq >= 25 && csq <= 31) {
+        cJSON_AddStringToObject(network, "signal", "strong");
+    }
+    cJSON_AddItemToObject(root, "network", network);
+
+    auto json_str = cJSON_PrintUnformatted(root);
+    std::string json(json_str);
+    cJSON_free(json_str);
+    cJSON_Delete(root);
+    return json;
 }

@@ -1,6 +1,6 @@
-#include "ml307_board.h"
+#include "dual_network_board.h"
 #include "audio_codecs/no_audio_codec.h"
-#include "display/lcd_display.h"
+#include "../zhengchen-1.54tft-wifi/zhengchen_lcd_display.h"
 #include "system_reset.h"
 #include "application.h"
 #include "button.h"
@@ -13,6 +13,7 @@
 
 #include <esp_log.h>
 #include <esp_lcd_panel_vendor.h>
+#include <wifi_station.h>
 
 #include <driver/rtc_io.h>
 #include <esp_sleep.h>
@@ -23,12 +24,12 @@ LV_FONT_DECLARE(font_puhui_20_4);
 LV_FONT_DECLARE(font_awesome_20_4);
 
 
-class ZHENGCHEN_1_54TFT_ML307 : public Ml307Board {
+class ZHENGCHEN_1_54TFT_ML307 : public DualNetworkBoard {
 private:
     Button boot_button_;
     Button volume_up_button_;
     Button volume_down_button_;
-    SpiLcdDisplay* display_;
+    ZHENGCHEN_LcdDisplay* display_;
     PowerSaveTimer* power_save_timer_;
     PowerManager* power_manager_;
     esp_lcd_panel_io_handle_t panel_io_ = nullptr;
@@ -36,6 +37,9 @@ private:
 
     void InitializePowerManager() {
         power_manager_ = new PowerManager(GPIO_NUM_9);
+        power_manager_->OnTemperatureChanged([this](float chip_temp) {
+            display_->UpdateHighTempWarning(chip_temp);
+        });
         power_manager_->OnChargingStatusChanged([this](bool is_charging) {
             if (is_charging) {
                 power_save_timer_->SetEnabled(false);
@@ -62,14 +66,6 @@ private:
             display_->SetEmotion("neutral");
             GetBacklight()->RestoreBrightness();
         });
-        /* power_save_timer_->OnShutdownRequest([this]() {
-            ESP_LOGI(TAG, "Shutting down");
-            rtc_gpio_set_level(GPIO_NUM_2, 0);
-            // 启用保持功能，确保睡眠期间电平不变
-            rtc_gpio_hold_en(GPIO_NUM_2);
-            esp_lcd_panel_disp_on_off(panel_, false); //关闭显示
-            esp_deep_sleep_start();
-        }); */
         power_save_timer_->SetEnabled(true);
     }
 
@@ -88,9 +84,19 @@ private:
         boot_button_.OnClick([this]() {
             power_save_timer_->WakeUp();
             auto& app = Application::GetInstance();
+            if (GetNetworkType() == NetworkType::WIFI) {
+                if (app.GetDeviceState() == kDeviceStateStarting && !WifiStation::GetInstance().IsConnected()) {
+                    // cast to WifiBoard
+                    auto& wifi_board = static_cast<WifiBoard&>(GetCurrentBoard());
+                    wifi_board.ResetWifiConfiguration();
+                }
+            }
             app.ToggleChatState();
         });
-        
+
+        boot_button_.OnLongPress([this]() {
+            SwitchNetworkType();
+        });
 
         volume_up_button_.OnClick([this]() {
             power_save_timer_->WakeUp();
@@ -151,13 +157,14 @@ private:
         ESP_ERROR_CHECK(esp_lcd_panel_mirror(panel_, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y));
         ESP_ERROR_CHECK(esp_lcd_panel_invert_color(panel_, true));
 
-        display_ = new SpiLcdDisplay(panel_io_, panel_, DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, 
+        display_ = new ZHENGCHEN_LcdDisplay(panel_io_, panel_, DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, 
             DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY, 
         {
             .text_font = &font_puhui_20_4,
             .icon_font = &font_awesome_20_4,
             .emoji_font = font_emoji_64_init(),
         });
+        display_->SetupHighTempWarningPopup();
     }
 
     void InitializeIot() {
@@ -165,12 +172,11 @@ private:
         thing_manager.AddThing(iot::CreateThing("Speaker"));
         thing_manager.AddThing(iot::CreateThing("Screen"));
         thing_manager.AddThing(iot::CreateThing("Battery"));
-        thing_manager.AddThing(iot::CreateThing("ESP32Temp"));
     }
 
 public:
     ZHENGCHEN_1_54TFT_ML307() :
-        Ml307Board(ML307_TX_PIN, ML307_RX_PIN, 4096),
+        DualNetworkBoard(ML307_TX_PIN, ML307_RX_PIN, 4096),
         boot_button_(BOOT_BUTTON_GPIO),
         volume_up_button_(VOLUME_UP_BUTTON_GPIO),
         volume_down_button_(VOLUME_DOWN_BUTTON_GPIO) {
@@ -206,11 +212,11 @@ public:
             power_save_timer_->SetEnabled(discharging);
             last_discharging = discharging;
         }
-        level = power_manager_->GetBatteryLevel();
+        level = std::max<uint32_t>(power_manager_->GetBatteryLevel(), 20);
         return true;
     }
 
-    virtual bool GetESP32Temp(float& esp32temp)  override {
+    virtual bool GetTemperature(float& esp32temp)  override {
         esp32temp = power_manager_->GetTemperature();
         return true;
     }
@@ -219,7 +225,7 @@ public:
         if (!enabled) {
             power_save_timer_->WakeUp();
         }
-        Ml307Board::SetPowerSaveMode(enabled);
+        DualNetworkBoard::SetPowerSaveMode(enabled);
     }
 };
 

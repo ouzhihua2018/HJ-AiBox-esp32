@@ -1,112 +1,63 @@
 #ifndef ZHENGCHEN_LCD_DISPLAY_H
 #define ZHENGCHEN_LCD_DISPLAY_H
 
-#include "display/display.h"
+#include "display/lcd_display.h"
+#include <esp_lvgl_port.h>
 
-#include <esp_lcd_panel_io.h>
-#include <esp_lcd_panel_ops.h>
-#include <font_emoji.h>
-
-#include <atomic>
-
-class ZHENGCHEN_LcdDisplay : public Display {
+class ZHENGCHEN_LcdDisplay : public SpiLcdDisplay {
 protected:
-    esp_lcd_panel_io_handle_t panel_io_ = nullptr;
-    esp_lcd_panel_handle_t panel_ = nullptr;
-    
-    lv_draw_buf_t draw_buf_;
-    lv_obj_t* status_bar_ = nullptr;
-    lv_obj_t* content_ = nullptr;
-    lv_obj_t* container_ = nullptr;
-    lv_obj_t* side_bar_ = nullptr;
+    lv_obj_t* high_temp_popup_ = nullptr;  // 高温警告弹窗
+    lv_obj_t* high_temp_label_ = nullptr;  // 高温警告标签
 
-    lv_obj_t* high_temp_popup_ = nullptr;
-    lv_obj_t* high_temp_label_ = nullptr;
-
-    DisplayFonts fonts_;
-
-    void SetupUI();
-    virtual bool Lock(int timeout_ms = 0) override;
-    virtual void Unlock() override;
-
-protected:
-    // 添加protected构造函数
-    ZHENGCHEN_LcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_t panel, DisplayFonts fonts)
-        : panel_io_(panel_io), panel_(panel), fonts_(fonts) {}
-    
 public:
-    ~ZHENGCHEN_LcdDisplay();
-    virtual void SetEmotion(const char* emotion) override;
-    virtual void SetIcon(const char* icon) override;
-     // 获取高温提示框指针
-    lv_obj_t* GetHighTempPopup() const { 
-        return high_temp_popup_; 
+    // 继承构造函数
+    using SpiLcdDisplay::SpiLcdDisplay;
+
+    void SetupHighTempWarningPopup() {
+        // 创建高温警告弹窗
+        high_temp_popup_ = lv_obj_create(lv_scr_act());  // 使用当前屏幕
+        lv_obj_set_scrollbar_mode(high_temp_popup_, LV_SCROLLBAR_MODE_OFF);
+        lv_obj_set_size(high_temp_popup_, LV_HOR_RES * 0.9, fonts_.text_font->line_height * 2);
+        lv_obj_align(high_temp_popup_, LV_ALIGN_BOTTOM_MID, 0, 0);
+        lv_obj_set_style_bg_color(high_temp_popup_, lv_palette_main(LV_PALETTE_RED), 0);
+        lv_obj_set_style_radius(high_temp_popup_, 10, 0);
+        
+        // 创建警告标签
+        high_temp_label_ = lv_label_create(high_temp_popup_);
+        lv_label_set_text(high_temp_label_, "警告：温度过高");
+        lv_obj_set_style_text_color(high_temp_label_, lv_color_white(), 0);
+        lv_obj_center(high_temp_label_);
+        
+        // 默认隐藏
+        lv_obj_add_flag(high_temp_popup_, LV_OBJ_FLAG_HIDDEN);
     }
-    /*
-    // 控制高温提示框显示/隐藏
-    void ShowHighTempPopup(bool show) {
-        if (!high_temp_popup_) {
-            ESP_LOGE("TAG", "弹窗对象已被删除！");
+
+    void UpdateHighTempWarning(float chip_temp, float threshold = 75.0f) {
+        if (high_temp_popup_ == nullptr) {
+            ESP_LOGW("ZHENGCHEN_LcdDisplay", "High temp popup not initialized!");
             return;
         }
-        if (high_temp_popup_) {
-            if (show) {
-                lv_obj_clear_flag(high_temp_popup_, LV_OBJ_FLAG_HIDDEN);
-            } else {
-                lv_obj_add_flag(high_temp_popup_, LV_OBJ_FLAG_HIDDEN);
-            }
+
+        if (chip_temp >= threshold) {
+            ShowHighTempWarning();
+        } else {
+            HideHighTempWarning();
         }
-    } */
-#if CONFIG_USE_WECHAT_MESSAGE_STYLE
-    virtual void SetChatMessage(const char* role, const char* content) override; 
-#endif  
+    }
 
-    // Add theme switching function
-    virtual void SetTheme(const std::string& theme_name) override;
+    void ShowHighTempWarning() {
+        if (high_temp_popup_ && lv_obj_has_flag(high_temp_popup_, LV_OBJ_FLAG_HIDDEN)) {
+            lv_obj_clear_flag(high_temp_popup_, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+
+    void HideHighTempWarning() {
+        if (high_temp_popup_ && !lv_obj_has_flag(high_temp_popup_, LV_OBJ_FLAG_HIDDEN)) {
+            lv_obj_add_flag(high_temp_popup_, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
 };
 
-// RGB LCD显示器
-class RgbZHENGCHEN_LcdDisplay : public ZHENGCHEN_LcdDisplay {
-public:
-    RgbZHENGCHEN_LcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_t panel,
-                  int width, int height, int offset_x, int offset_y,
-                  bool mirror_x, bool mirror_y, bool swap_xy,
-                  DisplayFonts fonts);
-};
 
-// MIPI LCD显示器
-class MipiZHENGCHEN_LcdDisplay : public ZHENGCHEN_LcdDisplay {
-public:
-    MipiZHENGCHEN_LcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_t panel,
-                   int width, int height, int offset_x, int offset_y,
-                   bool mirror_x, bool mirror_y, bool swap_xy,
-                   DisplayFonts fonts);
-};
 
-// // SPI LCD显示器
-class SpiZHENGCHEN_LcdDisplay : public ZHENGCHEN_LcdDisplay {
-public:
-    SpiZHENGCHEN_LcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_t panel,
-                  int width, int height, int offset_x, int offset_y,
-                  bool mirror_x, bool mirror_y, bool swap_xy,
-                  DisplayFonts fonts);
-};
-
-// QSPI LCD显示器
-class QspiZHENGCHEN_LcdDisplay : public ZHENGCHEN_LcdDisplay {
-public:
-    QspiZHENGCHEN_LcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_t panel,
-                   int width, int height, int offset_x, int offset_y,
-                   bool mirror_x, bool mirror_y, bool swap_xy,
-                   DisplayFonts fonts);
-};
-
-// MCU8080 LCD显示器
-class Mcu8080ZHENGCHEN_LcdDisplay : public ZHENGCHEN_LcdDisplay {
-public:
-    Mcu8080ZHENGCHEN_LcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_t panel,
-                      int width, int height, int offset_x, int offset_y,
-                      bool mirror_x, bool mirror_y, bool swap_xy,
-                      DisplayFonts fonts);
-};
 #endif // ZHENGCHEN_LCD_DISPLAY_H

@@ -6,11 +6,8 @@
 #include <driver/gpio.h>
 #include <esp_adc/adc_oneshot.h>
 #include <driver/temperature_sensor.h> 
-<<<<<<< HEAD
-=======
 #include "application.h"
 #include "zhengchen_lcd_display.h"
->>>>>>> 4cd292749e9a4c49c740386c0fdbfc702009d3c5
 
 class PowerManager {
 private:
@@ -136,20 +133,13 @@ private:
                 on_temperature_changed_(current_temperature_);
             }
             ESP_LOGI("PowerManager", "Temperature updated: %.1f°C", current_temperature_);
-<<<<<<< HEAD
-        }
-=======
         }      
->>>>>>> 4cd292749e9a4c49c740386c0fdbfc702009d3c5
     }
 
 
 public:
     PowerManager(gpio_num_t pin) : charging_pin_(pin) {
-<<<<<<< HEAD
-=======
         
->>>>>>> 4cd292749e9a4c49c740386c0fdbfc702009d3c5
         // 初始化充电引脚
         gpio_config_t io_conf = {};
         io_conf.intr_type = GPIO_INTR_DISABLE;

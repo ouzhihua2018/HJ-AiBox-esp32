@@ -11,6 +11,8 @@
 
 #define TAG "Board"
 
+
+
 Board::Board() {
     Settings settings("board", true);
     uuid_ = settings.GetString("uuid");
@@ -18,6 +20,7 @@ Board::Board() {
         uuid_ = GenerateUuid();
         settings.SetString("uuid", uuid_);
     }
+    
     ESP_LOGI(TAG, "UUID=%s SKU=%s", uuid_.c_str(), BOARD_NAME);
 }
 
@@ -48,13 +51,17 @@ bool Board::GetBatteryLevel(int &level, bool& charging, bool& discharging) {
     return false;
 }
 
-bool Board::GetESP32Temp(float& esp32temp){
+bool Board::GetTemperature(float& esp32temp){
     return false;
 }
 
 Display* Board::GetDisplay() {
     static NoDisplay display;
     return &display;
+}
+
+Camera* Board::GetCamera() {
+    return nullptr;
 }
 
 Led* Board::GetLed() {

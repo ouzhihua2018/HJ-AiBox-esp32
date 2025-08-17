@@ -25,12 +25,16 @@ public:
     virtual void SetEmotion(const char* emotion);
     virtual void SetChatMessage(const char* role, const char* content);
     virtual void SetIcon(const char* icon);
+    virtual void SetPreviewImage(const lv_img_dsc_t* image);
+    virtual void SetWechatQrcodeImage(const lv_img_dsc_t* img_dsc) {}; //do nothing,for topd board use
     virtual void SetTheme(const std::string& theme_name);
     virtual std::string GetTheme() { return current_theme_name_; }
-
+    virtual void UpdateStatusBar(bool update_all = false);
+    virtual void SwitchToGifContainer() {}; //do nothing,for topd board use
+    virtual void SwitchToActivationStatusContainer() {}; //do nothing,for topd board use
     inline int width() const { return width_; }
     inline int height() const { return height_; }
-
+    lv_img_dsc_t Qr_image_;
 protected:
     int width_ = 0;
     int height_ = 0;
@@ -56,13 +60,10 @@ protected:
     std::string current_theme_name_;
 
     esp_timer_handle_t notification_timer_ = nullptr;
-    esp_timer_handle_t update_timer_ = nullptr;
 
     friend class DisplayLockGuard;
     virtual bool Lock(int timeout_ms = 0) = 0;
     virtual void Unlock() = 0;
-
-    virtual void Update();
 };
 
 
