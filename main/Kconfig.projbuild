@@ -13,26 +13,6 @@ config LV_USE_LODEPNG
         Enable LVGL PNG decoder using LODEPNG library for displaying PNG images.
         This is required for QR code display functionality.
 
-config LV_USE_LIBPNG
-    bool "Enable LVGL PNG decoder (LIBPNG)"
-    default n
-    depends on !LV_USE_LODEPNG
-    help
-        Enable LVGL PNG decoder using LIBPNG library.
-        Only enable one PNG decoder (LODEPNG or LIBPNG).
-
-config LV_USE_IMAGE_DECODER
-    bool "Enable LVGL image decoder"
-    default y
-    help
-        Enable LVGL image decoder for various image formats including PNG.
-
-config LV_USE_IMAGE_CACHE
-    bool "Enable LVGL image cache"
-    default y
-    help
-        Enable LVGL image cache to improve performance when displaying images.
-
 
 choice
     prompt "Default Language"
