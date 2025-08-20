@@ -2,7 +2,7 @@ menu "Xiaozhi Assistant"
 
 config OTA_URL
     string "Default OTA URL"
-    default "https://api.tenclass.net/xiaozhi/ota/"
+    default "http://core.device.158box.com/xiaozhi/ota2/"
     help
         The application will access this URL to check for new firmwares and server address.
 
