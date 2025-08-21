@@ -6,6 +6,13 @@ config OTA_URL
     help
         The application will access this URL to check for new firmwares and server address.
 
+config LV_USE_LODEPNG
+    bool "Enable LVGL PNG decoder (LODEPNG)"
+    default y
+    help
+        Enable LVGL PNG decoder using LODEPNG library for displaying PNG images.
+        This is required for QR code display functionality.
+
 
 choice
     prompt "Default Language"
