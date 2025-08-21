@@ -607,7 +607,10 @@ void LcdDisplay::SetupUI() {
     auto screen = lv_screen_active();
     lv_obj_set_style_text_font(screen, fonts_.text_font, 0);
     lv_obj_set_style_text_color(screen, current_theme_.text, 0);
-    lv_obj_set_style_bg_color(screen, current_theme_.background, 0);
+    lv_color_t display_bg_color  = {
+        0x00,0x00,0x00
+    };
+    lv_obj_set_style_bg_color(screen, display_bg_color, 0);
 
     /* Container */
     container_ = lv_obj_create(screen);
@@ -616,7 +619,7 @@ void LcdDisplay::SetupUI() {
     lv_obj_set_style_pad_all(container_, 0, 0);
     lv_obj_set_style_border_width(container_, 0, 0);
     lv_obj_set_style_pad_row(container_, 0, 0);
-    lv_obj_set_style_bg_color(container_, current_theme_.background, 0);
+    lv_obj_set_style_bg_color(container_, display_bg_color, 0);
     lv_obj_set_style_border_color(container_, current_theme_.border, 0);
 
     /* Status bar */

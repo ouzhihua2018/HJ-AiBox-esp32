@@ -10,7 +10,7 @@
 #include "iot/thing_manager.h"
 #include "led/circular_strip.h"
 #include "assets/lang_config.h"
-
+#include "hj_lcd_display.h"
 #include <wifi_station.h>
 #include <esp_log.h>
 #include <driver/i2c_master.h>
@@ -130,7 +130,7 @@ private:
 #ifdef  LCD_TYPE_GC9A01_SERIAL
         panel_config.vendor_config = &gc9107_vendor_config;
 #endif
-       display_ = new SpiLcdDisplay(panel_io, panel,
+       display_ = new HJEmojiDisplay(panel_io, panel,
                                     DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY,
                                     {
                                         .text_font = &font_puhui_14_1,
