@@ -15,6 +15,7 @@
 #define AUDIO_I2S_SPK_GPIO_BCLK GPIO_NUM_15
 #define AUDIO_I2S_SPK_GPIO_LRCK GPIO_NUM_16
 
+#define BUILTIN_LED_GPIO        GPIO_NUM_2
 #define BOOT_BUTTON_GPIO        GPIO_NUM_0
 #define VOLUME_UP_BUTTON_GPIO   GPIO_NUM_10
 #define VOLUME_DOWN_BUTTON_GPIO GPIO_NUM_39
@@ -26,7 +27,7 @@
 #define DISPLAY_CS GPIO_NUM_21
 
 #define USER_BUTTON_GPIO GPIO_NUM_17 // ASRPRO唤醒GPIO引脚
-#define HUMAN_SENSOR_GPIO GPIO_NUM_18  // 人体传感器GPIO引脚
+//#define HUMAN_SENSOR_GPIO GPIO_NUM_18  // 人体传感器GPIO引脚
 
 #define DISPLAY_WIDTH   240
 #define DISPLAY_HEIGHT  240
@@ -43,17 +44,5 @@
 #define ML307_RX_PIN GPIO_NUM_11
 #define ML307_TX_PIN GPIO_NUM_12
 
- 
- // 配置GPIO为输入模式，上拉（根据模块输出特性可选）
-    void init_human_sensor() {
-        gpio_config_t io_conf = {
-            .pin_bit_mask = (1ULL << HUMAN_SENSOR_GPIO),
-            .mode = GPIO_MODE_INPUT,
-            .pull_up_en = GPIO_PULLUP_DISABLE,
-            .pull_down_en = GPIO_PULLDOWN_DISABLE,
-            .intr_type = GPIO_INTR_DISABLE
-        };
-        gpio_config(&io_conf);
-    }
 
 #endif // _BOARD_CONFIG_H_
