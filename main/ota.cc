@@ -47,7 +47,7 @@ std::string Ota::GetCheckVersionUrl() {
         url = CONFIG_OTA_URL;
     }
     url = "https://api.tenclass.net/xiaozhi/ota/";  //https://api.tenclass.net/xiaozhi/ota/
-    return url; //http://core.device.158box.com/xiaozhi/ota2/
+    return url;  //http://core.device.158box.com/xiaozhi/ota2/
 }
 
 // 在 Ota 类中修改方法定义
@@ -59,9 +59,6 @@ Http* Ota::SetupHttp() {
     auto& board = Board::GetInstance();
     auto app_desc = esp_app_get_description();
 
-    // 配置ML307 SSL协议设置
-    ConfigureMl307SslProtocol();
-
     auto http = board.CreateHttp();
     http->SetHeader("Activation-Version", has_serial_number_ ? "2" : "1");
     http->SetHeader("Device-Id", SystemInfo::GetMacAddress().c_str());
@@ -72,15 +69,6 @@ Http* Ota::SetupHttp() {
     http->SetHeader("User-Agent", std::string(BOARD_NAME "/") + app_desc->version);
     http->SetHeader("Accept-Language", Lang::CODE);
     http->SetHeader("Content-Type", "application/json");
-    
-    // 添加SSL相关配置
-    http->SetHeader("Connection", "close");
-    http->SetHeader("Accept-Encoding", "identity"); // 避免压缩，简化处理
-    
-    // 设置超时时间（毫秒）- 4G网络需要更长的超时时间
-    http->SetTimeout(60000); // 60秒超时
-    
-    ESP_LOGI(TAG, "HTTP client configured with enhanced SSL support and extended timeout for 4G");
 
     return http;
 }
@@ -109,19 +97,14 @@ bool Ota::CheckVersion() {
     std::string method = data.length() > 0 ? "POST" : "GET";
     http->SetContent(std::move(data));
 
-    ESP_LOGI(TAG, "Opening HTTP connection to: %s", url.c_str());
     if (!http->Open(method, url)) {
-        ESP_LOGE(TAG, "Failed to open HTTP connection to: %s", url.c_str());
+        ESP_LOGE(TAG, "Failed to open HTTP connection");
         return false;
     }
 
     auto status_code = http->GetStatusCode();
-    ESP_LOGI(TAG, "HTTP response status: %d", status_code);
-    
     if (status_code != 200) {
-        std::string error_response = http->ReadAll();
-        ESP_LOGE(TAG, "Failed to check version, status code: %d, response: %s", status_code, error_response.c_str());
-        http->Close();
+        ESP_LOGE(TAG, "Failed to check version, status code: %d", status_code);
         return false;
     }
 
@@ -511,76 +494,34 @@ esp_err_t Ota::Activate() {
 
 bool Ota::Download_Qrcode()
 {   
+    Board& board = Board::GetInstance();
     //Get Wechat QrCode URL
     auto& Wechat_Qr_Code_Url = GetWechatQrCodeUrl();
     if(Wechat_Qr_Code_Url.data() == NULL){
         ESP_LOGE(TAG,"NO Qr_code_url");
         return false;
     }
-    
-    // 检查URL是否为HTTPS，如果是则使用专门的HTTPS下载函数
-    if (Wechat_Qr_Code_Url.find("https://") == 0) {
-        ESP_LOGI(TAG, "Detected HTTPS URL, using HTTPS download function");
-        return Download_Qrcode_Https();
-    }
-    
     ESP_LOGI(TAG,"-------------------------------------");
     ESP_LOGI(TAG,"Get_Wechat_Qrcode_URL:%s",Wechat_Qr_Code_Url.c_str());
-    
     //Download Qrcode
     auto http = SetupHttp();  //default http header
-    
-    // 检查URL是否为HTTPS
-    bool is_https = (Wechat_Qr_Code_Url.find("https://") == 0);
-    ESP_LOGI(TAG, "URL is HTTPS: %s", is_https ? "true" : "false");
-    
     // 设置下载图片的请求头
     http->SetHeader("User-Agent", "ESP32-QRCode-Downloader/1.0");
     http->SetHeader("Accept", "image/png,image/*,*/*");
     http->SetHeader("Cache-Control", "no-cache");
-    
-    // 如果是HTTPS，添加SSL相关配置
-    if (is_https) {
-        // 设置SSL配置
-        http->SetHeader("Connection", "close");
-        // 添加SSL验证相关设置
-        ESP_LOGI(TAG, "Configuring SSL for HTTPS download");
-    }
-    
-    ESP_LOGI(TAG, "Opening HTTP connection to: %s", Wechat_Qr_Code_Url.c_str());
-    if (!http->Open("GET", Wechat_Qr_Code_Url)) {
-        ESP_LOGE(TAG, "Failed to open HTTP connection to: %s", Wechat_Qr_Code_Url.c_str());
-        return false;
-    }
+    http->Open("GET",Wechat_Qr_Code_Url);
 
     int status = http->GetStatusCode();
-    ESP_LOGI(TAG, "HTTP response status: %d", status);
-    
     if(status != 200){
         ESP_LOGE(TAG,"Wechat Qrcode http response error,status %d",status);
-        // 获取错误响应内容以便调试
-        std::string error_response = http->ReadAll();
-        ESP_LOGE(TAG, "Error response: %s", error_response.c_str());
-        http->Close();
         return false;
     }
-    
-    ESP_LOGI(TAG, "Starting to read image data...");
     wechat_qr_data_ = http->ReadAll();
     http->Close();
-    
-    ESP_LOGI(TAG, "Downloaded image size: %zu bytes", wechat_qr_data_.size());
-    
-    if (wechat_qr_data_.empty()) {
-        ESP_LOGE(TAG, "Downloaded image data is empty");
-        return false;
-    }
-    
     const char * png_header_check = wechat_qr_data_.c_str();
     ESP_LOGI(TAG, "Image header bytes: %02X %02X %02X %02X %02X %02X %02X %02X", 
         png_header_check[0], png_header_check[1], png_header_check[2], png_header_check[3], 
         png_header_check[4], png_header_check[5], png_header_check[6], png_header_check[7]);
-    
     if(png_header_check[0] !=0x89 ||png_header_check[1] !=0x50 ||png_header_check[2] !=0x4E ||png_header_check[3] !=0x47 ||
         png_header_check[4] !=0x0D ||png_header_check[5] !=0x0A ||png_header_check[6] !=0x1A ||png_header_check[7] !=0x0A ){
         ESP_LOGI(TAG, "wechat qrcode png header check error");
@@ -590,240 +531,3 @@ bool Ota::Download_Qrcode()
 
     return true;
 }
-
-bool Ota::Download_Qrcode_Https() {
-    auto& Wechat_Qr_Code_Url = GetWechatQrCodeUrl();
-    
-    if(Wechat_Qr_Code_Url.data() == NULL){
-        ESP_LOGE(TAG,"NO Qr_code_url");
-        return false;
-    }
-    
-    // 检查URL是否为HTTPS
-    if (Wechat_Qr_Code_Url.find("https://") != 0) {
-        ESP_LOGI(TAG, "URL is not HTTPS, using regular download");
-        return Download_Qrcode();
-    }
-    
-    ESP_LOGI(TAG,"-------------------------------------");
-    ESP_LOGI(TAG,"Enhanced HTTPS Download - Get_Wechat_Qrcode_URL:%s",Wechat_Qr_Code_Url.c_str());
-    
-    // 创建HTTP客户端
-    auto http = SetupHttp();
-    
-    // 配置增强的SSL设置
-    ConfigureSslForHttps(http);
-    
-    // 设置HTTPS专用请求头
-    http->SetHeader("User-Agent", "ESP32-QRCode-Downloader/1.0");
-    http->SetHeader("Accept", "image/png,image/*,*/*");
-    http->SetHeader("Cache-Control", "no-cache");
-    
-    // 智能重试机制 - 根据错误类型调整重试策略
-    int max_retries = 5; // 减少重试次数，但增加智能性
-    int retry_count = 0;
-    bool success = false;
-    int last_error_code = 0;
-    
-    while (retry_count < max_retries && !success) {
-        ESP_LOGI(TAG, "HTTPS download attempt %d/%d", retry_count + 1, max_retries);
-        
-        // 在每次重试前重置连接
-        http->Close();
-        
-        // 根据重试次数调整等待时间
-        int wait_time = 2000 + (retry_count * 1000); // 2秒, 3秒, 4秒, 5秒, 6秒
-        ESP_LOGI(TAG, "Waiting %d ms before retry...", wait_time);
-        vTaskDelay(pdMS_TO_TICKS(wait_time));
-        
-        // 尝试建立HTTPS连接
-        ESP_LOGI(TAG, "Attempting HTTPS connection...");
-        if (!http->Open("GET", Wechat_Qr_Code_Url)) {
-            ESP_LOGE(TAG, "Failed to open HTTPS connection (attempt %d)", retry_count + 1);
-            last_error_code = -1; // 连接失败
-            retry_count++;
-            
-            // 如果是SSL握手失败，增加更长的等待时间
-            if (retry_count < max_retries) {
-                int ssl_wait_time = 5000 + (retry_count * 2000); // 5秒, 7秒, 9秒, 11秒
-                ESP_LOGI(TAG, "SSL connection failed, waiting %d ms before next attempt", ssl_wait_time);
-                vTaskDelay(pdMS_TO_TICKS(ssl_wait_time));
-            }
-            continue;
-        }
-        
-        // 获取响应状态
-        int status = http->GetStatusCode();
-        ESP_LOGI(TAG, "HTTPS response status: %d", status);
-        
-        if (status == 200) {
-            ESP_LOGI(TAG, "HTTPS connection successful, reading data...");
-            
-            // 分块读取数据，避免内存问题
-            std::string data;
-            const int chunk_size = 1024;
-            char buffer[chunk_size];
-            size_t total_read = 0;
-            
-            while (true) {
-                int bytes_read = http->Read(buffer, chunk_size);
-                if (bytes_read <= 0) {
-                    break;
-                }
-                data.append(buffer, bytes_read);
-                total_read += bytes_read;
-                
-                // 检查内存使用
-                if (data.size() > 1024 * 1024) { // 1MB限制
-                    ESP_LOGE(TAG, "Data too large (%zu bytes), aborting download", data.size());
-                    break;
-                }
-                
-                // 定期输出进度
-                if (total_read % (10 * 1024) == 0) { // 每10KB输出一次
-                    ESP_LOGI(TAG, "Downloaded %zu bytes...", total_read);
-                }
-            }
-            
-            http->Close();
-            
-            ESP_LOGI(TAG, "Downloaded image size: %zu bytes", data.size());
-            
-            if (!data.empty()) {
-                // 验证PNG头部
-                if (data.size() >= 8) {
-                    const unsigned char* png_header = reinterpret_cast<const unsigned char*>(data.c_str());
-                    if(png_header[0] == 0x89 && png_header[1] == 0x50 && 
-                       png_header[2] == 0x4E && png_header[3] == 0x47 &&
-                       png_header[4] == 0x0D && png_header[5] == 0x0A && 
-                       png_header[6] == 0x1A && png_header[7] == 0x0A) {
-                        ESP_LOGI(TAG, "HTTPS download successful, PNG header verified");
-                        wechat_qr_data_ = std::move(data);
-                        success = true;
-                        break;
-                    } else {
-                        ESP_LOGE(TAG, "Invalid PNG header in downloaded data");
-                        ESP_LOGE(TAG, "Header bytes: %02X %02X %02X %02X %02X %02X %02X %02X",
-                                png_header[0], png_header[1], png_header[2], png_header[3],
-                                png_header[4], png_header[5], png_header[6], png_header[7]);
-                        last_error_code = -2; // PNG头部无效
-                    }
-                } else {
-                    ESP_LOGE(TAG, "Downloaded data too small for PNG header (%zu bytes)", data.size());
-                    last_error_code = -3; // 数据太小
-                }
-            } else {
-                ESP_LOGE(TAG, "Downloaded data is empty");
-                last_error_code = -4; // 空数据
-            }
-        } else {
-            ESP_LOGE(TAG, "HTTPS request failed with status: %d", status);
-            std::string error_response = http->ReadAll();
-            ESP_LOGE(TAG, "Error response: %s", error_response.c_str());
-            http->Close();
-            last_error_code = status;
-        }
-        
-        retry_count++;
-        if (retry_count < max_retries) {
-            // 根据错误类型调整重试策略
-            int delay_seconds;
-            if (last_error_code == 4) { // SSL握手失败
-                delay_seconds = 5 + (retry_count * 3); // 5, 8, 11, 14秒
-                ESP_LOGI(TAG, "SSL handshake failed, retrying in %d seconds...", delay_seconds);
-            } else if (last_error_code >= 500) { // 服务器错误
-                delay_seconds = 3 + (retry_count * 2); // 3, 5, 7, 9秒
-                ESP_LOGI(TAG, "Server error, retrying in %d seconds...", delay_seconds);
-            } else { // 其他错误
-                delay_seconds = 2 + retry_count; // 2, 3, 4, 5秒
-                ESP_LOGI(TAG, "Connection error, retrying in %d seconds...", delay_seconds);
-            }
-            vTaskDelay(pdMS_TO_TICKS(delay_seconds * 1000));
-        }
-    }
-    
-    if (!success) {
-        ESP_LOGE(TAG, "All HTTPS download attempts failed (last error: %d)", last_error_code);
-        
-        // 尝试降级到HTTP（如果URL支持）
-        std::string http_url = Wechat_Qr_Code_Url;
-        if (http_url.find("https://") == 0) {
-            http_url.replace(0, 8, "http://");
-            ESP_LOGI(TAG, "Attempting HTTP fallback: %s", http_url.c_str());
-            
-            // 临时修改URL进行HTTP尝试
-            std::string original_url = wechat_qr_code_url_;
-            wechat_qr_code_url_ = http_url;
-            bool http_success = Download_Qrcode();
-            wechat_qr_code_url_ = original_url;
-            
-            if (http_success) {
-                ESP_LOGI(TAG, "HTTP fallback successful");
-                return true;
-            }
-        }
-        
-        // 如果HTTP降级也失败，返回失败
-        ESP_LOGW(TAG, "Both HTTPS and HTTP download failed");
-        return false;
-    }
-    
-    return true;
-}
-
-void Ota::ConfigureSslForHttps(Http* http) {
-    if (!http) {
-        ESP_LOGE(TAG, "HTTP client is null");
-        return;
-    }
-    
-    ESP_LOGI(TAG, "Configuring enhanced SSL settings for HTTPS");
-    
-    // 基础SSL配置 - 简化头部，减少SSL握手复杂度
-    http->SetHeader("Connection", "close");
-    http->SetHeader("Accept-Encoding", "identity"); // 避免压缩
-    http->SetHeader("Accept", "image/png,image/*,*/*");
-    http->SetHeader("User-Agent", "ESP32-ML307/1.0");
-    
-    // 设置更长的超时时间，适应4G网络
-    http->SetTimeout(60000); // 60秒超时
-    
-    // 添加SSL特定的头部配置
-    http->SetHeader("Cache-Control", "no-cache");
-    http->SetHeader("Pragma", "no-cache");
-    
-    // 移除可能导致SSL问题的现代浏览器头部
-    // 这些头部可能导致某些服务器拒绝连接
-    // http->SetHeader("Upgrade-Insecure-Requests", "1");
-    // http->SetHeader("X-Requested-With", "XMLHttpRequest");
-    // http->SetHeader("Sec-Fetch-Dest", "image");
-    // http->SetHeader("Sec-Fetch-Mode", "no-cors");
-    // http->SetHeader("Sec-Fetch-Site", "cross-site");
-    // http->SetHeader("Sec-Fetch-User", "?1");
-    
-    ESP_LOGI(TAG, "Enhanced SSL configuration completed for ML307 compatibility");
-    ESP_LOGI(TAG, "SSL settings: Connection=close, Accept-Encoding=identity, Timeout=60s");
-}
-
-void Ota::ConfigureMl307SslProtocol() {
-    ESP_LOGI(TAG, "Configuring ML307 SSL protocol settings");
-    
-    // 这里可以添加ML307特定的SSL协议配置
-    // 例如设置TLS版本、加密套件等
-    // 这些配置通常在AT命令层面进行
-    
-    ESP_LOGI(TAG, "ML307 SSL protocol configuration completed");
-    ESP_LOGI(TAG, "SSL Protocol: TLS 1.2");
-    ESP_LOGI(TAG, "Cipher Suite: Compatible");
-    ESP_LOGI(TAG, "Certificate Verification: Disabled for compatibility");
-}
-
-bool Ota::GetQRCodeInfoOnly() {
-    // 复用 CheckVersion 流程以解析 activation 和 wechat 字段
-    // 返回请求是否成功（HTTP 200 且 JSON 解析成功）
-    return CheckVersion();
-}
-
-
-
-

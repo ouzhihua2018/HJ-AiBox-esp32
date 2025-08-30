@@ -34,17 +34,14 @@ private:
     Button volume_up_button_;
     Button volume_down_button_;
     Button user_button_; // 新增语音ASRPRO激活板virtual按键
-    //Button human_sensor_button_; // 新增人体接近传感器激活按键，利用Button类实现
+   
     TopdEmojiDisplay* display_;
     PowerSaveTimer* power_save_timer_;
     PowerManager* power_manager_;
     esp_lcd_panel_io_handle_t panel_io_ = nullptr;
     esp_lcd_panel_handle_t panel_ = nullptr;
 
-    // int64_t human_sensor_high_start_time_;   // 记录IO18高电平开始时间
-    // int64_t human_sensor_low_start_time_;    // 记录IO18低电平开始时间
-    // bool was_in_listening_state_;    // 是否曾经进入过聆听状态
-    // bool goodbye_message_sent_;      // 是否已发送告别消息
+    
 
     void InitializePowerManager() {
         power_manager_ = new PowerManager(GPIO_NUM_9);
@@ -152,79 +149,10 @@ private:
             }
         });
 
-        // // HUMAN_SENSOR毫米波传感器 - 触发(高电平)状态的处理
-        // human_sensor_button_.OnPressDown([this]() {
-        //     ESP_LOGI(TAG, "HUMAN_SENSOR按下 (高电平)");
-        //     // 记录按下(高电平)开始时间
-        //     human_sensor_high_start_time_ = esp_timer_get_time() / 1000;
-        // });
-        
-        // // HUMAN_SENSOR毫米波传感器 - 结束(低电平)状态的处理
-        // human_sensor_button_.OnPressUp([this]() {
-        //     ESP_LOGI(TAG, "HUMAN_SENSOR松开 (低电平)");
-        //     // 记录松开(低电平)开始时间
-        //     human_sensor_low_start_time_ = esp_timer_get_time() / 1000;
-        // });
-        
-        // // 创建定时器任务，用于检测HUMAN_SENSOR持续高电平和低电平时间
-        // xTaskCreate(HUMAN_SENSORTimerTask, "human_sensor_timer", 4096, this, 5, nullptr);
+      
     }
     
-    // // HUMAN_SENSOR定时器任务，检测按钮持续高电平和低电平时间
-    // static void HUMAN_SENSORTimerTask(void* arg) {
-    //     TOPD_1_54TFT_ML307_00* board = static_cast<TOPD_1_54TFT_ML307_00*>(arg);
-        
-    //     while (1) {
-    //         // 获取当前设备状态
-    //         auto& app = Application::GetInstance();
-    //         DeviceState current_state = app.GetDeviceState();
-            
-    //         // 情况1: 设备空闲状态下检测高电平持续时间
-    //         if (current_state == kDeviceStateIdle) {
-    //             // 检测是否是高电平状态(触发状态)
-    //             if (gpio_get_level(HUMAN_SENSOR_GPIO)) {
-    //                 int64_t current_time = esp_timer_get_time() / 1000;
-    //                 int64_t duration = current_time - board->human_sensor_high_start_time_;
-                    
-    //                 // 如果持续高电平超过5秒，触发唤醒
-    //                 if (duration >= 5000) {
-    //                     ESP_LOGI(TAG, "HUMAN_SENSOR高电平持续5秒，触发唤醒词");
-    //                     // 使用值捕获代替引用捕获
-    //                     Application* app_ptr = &app;
-    //                     app.Schedule([app_ptr]() {
-    //                         app_ptr->WakeWordInvoke("你好！");
-    //                     });
-    //                     board->was_in_listening_state_ = true;  // 修改为true，表示已进入聆听状态
-    //                     board->goodbye_message_sent_ = false;
-    //                 }
-    //             }
-    //         }
-    //         // 情况2: 曾经通过高电平触发进入聆听状态，现在处于低电平，检测低电平持续时间
-    //         else if (board->was_in_listening_state_ && 
-    //                 current_state == kDeviceStateListening && 
-    //                 !gpio_get_level(HUMAN_SENSOR_GPIO) &&
-    //                 !board->goodbye_message_sent_) {
-    //             int64_t current_time = esp_timer_get_time() / 1000;
-    //             int64_t low_duration = current_time - board->human_sensor_low_start_time_;
-                
-    //             // 如果持续低电平超过5秒，发送结束对话消息
-    //             if (low_duration >= 5000) {
-    //                 ESP_LOGI(TAG, "HUMAN_SENSOR低电平持续5秒，发送结束对话消息");
-    //                 // 使用值捕获代替引用捕获
-    //                 Application* app_ptr = &app;
-    //                 app.Schedule([app_ptr]() {
-    //                     // app_ptr->SetDeviceState(kDeviceStateIdle);
-    //                     app_ptr->WakeWordInvoke("再见！");
-    //                 });
-    //                 board->goodbye_message_sent_ = true;
-    //                 board->was_in_listening_state_ = false;
-    //             }
-    //         }
-            
-    //         // 50ms检测一次
-    //         vTaskDelay(pdMS_TO_TICKS(50));
-    //     }
-    // }
+  
 
     void InitializeSt7789Display() {
         ESP_LOGD(TAG, "Install panel IO");
@@ -275,11 +203,6 @@ public:
         volume_up_button_(VOLUME_UP_BUTTON_GPIO),
         volume_down_button_(VOLUME_DOWN_BUTTON_GPIO),
         user_button_(USER_BUTTON_GPIO)
-        // human_sensor_button_(HUMAN_SENSOR_GPIO, true),    // HUMAN_SENSOR按钮，高电平有效
-        // human_sensor_high_start_time_(0),
-        // human_sensor_low_start_time_(0),
-        // was_in_listening_state_(false),
-        // goodbye_message_sent_(false) 
     {   
 
         InitializePowerManager();
@@ -290,10 +213,12 @@ public:
         InitializeIot();
         GetBacklight()->RestoreBrightness();
     }
+    
     virtual Led* GetLed() override {
         static CircularStrip led(BUILTIN_LED_GPIO, 2);
         return &led;
     }
+    
     virtual AudioCodec* GetAudioCodec() override {
         static NoAudioCodecSimplex audio_codec(AUDIO_INPUT_SAMPLE_RATE, AUDIO_OUTPUT_SAMPLE_RATE,
             AUDIO_I2S_SPK_GPIO_BCLK, AUDIO_I2S_SPK_GPIO_LRCK, AUDIO_I2S_SPK_GPIO_DOUT, AUDIO_I2S_MIC_GPIO_SCK, AUDIO_I2S_MIC_GPIO_WS, AUDIO_I2S_MIC_GPIO_DIN);

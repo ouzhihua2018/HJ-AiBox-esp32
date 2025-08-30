@@ -23,6 +23,10 @@ set(SOURCES "audio_codecs/audio_codec.cc"
             "background_task.cc"
             "main.cc"
             )
+            
+# 添加emoji源文件
+file(GLOB EMOJI_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/emoji/*.c)
+list(APPEND SOURCES ${EMOJI_SOURCES})
 
 set(INCLUDE_DIRS "." "display" "audio_codecs" "protocols" "audio_processing" "emoji")
 
