@@ -536,7 +536,7 @@ void Application::Start() {
 #if CONFIG_IOT_PROTOCOL_MCP
     McpServer::GetInstance().AddCommonTools();
 #endif
-
+    //ota_.HasMqttConfig()
     if (ota_.HasMqttConfig()) {
         protocol_ = std::make_unique<MqttProtocol>();
     } else if (ota_.HasWebsocketConfig()) {
@@ -593,6 +593,7 @@ void Application::Start() {
                     }
                 });
             } else if (strcmp(state->valuestring, "stop") == 0) {
+                ESP_LOGW(TAG,"JSON STOP");
                 Schedule([this]() {
                     background_task_->WaitForCompletion();
                     if (device_state_ == kDeviceStateSpeaking) {

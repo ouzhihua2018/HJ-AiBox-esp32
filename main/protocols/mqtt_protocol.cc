@@ -60,6 +60,7 @@ bool MqttProtocol::StartMqttClient(bool report_error) {
     });
 
     mqtt_->OnMessage([this](const std::string& topic, const std::string& payload) {
+        ESP_LOGW(TAG,"mqtt payload:%s",payload.c_str());
         cJSON* root = cJSON_Parse(payload.c_str());
         if (root == nullptr) {
             ESP_LOGE(TAG, "Failed to parse json message %s", payload.c_str());
@@ -73,6 +74,7 @@ bool MqttProtocol::StartMqttClient(bool report_error) {
         }
 
         if (strcmp(type->valuestring, "hello") == 0) {
+            ESP_LOGI(TAG,"receive hello");
             ParseServerHello(root);
         } else if (strcmp(type->valuestring, "goodbye") == 0) {
             auto session_id = cJSON_GetObjectItem(root, "session_id");
