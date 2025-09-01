@@ -14,6 +14,17 @@
 
 WebsocketProtocol::WebsocketProtocol() {
     event_group_handle_ = xEventGroupCreate();
+    esp_timer_create_args_t clock_timer_args = {
+        .callback = [](void* arg) {
+            Application& app = Application::GetInstance();
+            app.has_goodbye_json_ = false;
+        },
+        .arg = this,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "wake_timer",
+        .skip_unhandled_events = true
+    };
+    esp_timer_create(&clock_timer_args, &wake_timer_handle_);
 }
 
 WebsocketProtocol::~WebsocketProtocol() {
@@ -171,6 +182,11 @@ bool WebsocketProtocol::OpenAudioChannel() {
 
     websocket_->OnDisconnected([this]() {
         ESP_LOGI(TAG, "Websocket disconnected");
+        Application& app = Application::GetInstance();
+            app.has_hello_json_ = false;
+            app.has_goodbye_json_ = true;
+           
+        esp_timer_start_once(wake_timer_handle_,10*1000*1000); //10s后可再次毫米波唤醒
         if (on_audio_channel_closed_ != nullptr) {
             on_audio_channel_closed_();
         }

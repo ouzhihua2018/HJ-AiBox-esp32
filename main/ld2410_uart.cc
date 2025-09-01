@@ -62,7 +62,7 @@ static void uart_data_task(void *arg)
                 if(app.GetDeviceState() == kDeviceStateIdle 
                 && (ld2410_obj->Rx_buffer_[1] == 0x02 || ld2410_obj->Rx_buffer_[1] == 0x03))
                 {
-                    ESP_LOGI(TAG, "hasboodbye:%d",hasgoodbye);
+                    //ESP_LOGI(TAG, "hasboodbye:%d",hasgoodbye);
                     if (hasgoodbye) { //用户刚说过再见，本次拒绝唤醒
                         continue;
                     }
@@ -73,7 +73,7 @@ static void uart_data_task(void *arg)
                 && (ld2410_obj->Rx_buffer_[1] == 0x00 || ld2410_obj->Rx_buffer_[1] == 0x01))
                 {   //用户唤醒词唤醒，结束对话不由毫米波控制
                     if(app.has_hello_json_) {
-                        ESP_LOGW(TAG,"has_hello_json_");
+                        //ESP_LOGW(TAG,"has_hello_json_");
                         continue;
                     }
                     ESP_LOGI(TAG, "human move,End the conversation");

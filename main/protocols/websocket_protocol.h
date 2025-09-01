@@ -25,7 +25,7 @@ private:
     EventGroupHandle_t event_group_handle_;
     WebSocket* websocket_ = nullptr;
     int version_ = 1;
-
+    esp_timer_handle_t wake_timer_handle_;
     void ParseServerHello(const cJSON* root);
     bool SendText(const std::string& text) override;
     std::string GetHelloMessage();
