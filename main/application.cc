@@ -50,7 +50,13 @@ static const char* const STATE_STRINGS[] = {
     "invalid_state"
 };
 
-Application::Application() {
+bool &Application::GetHasGoodByeJson()
+{
+    return has_goodbye_json_;
+}
+
+Application::Application()
+{
     event_group_ = xEventGroupCreate();
     background_task_ = new BackgroundTask(4096 * 7);
 
@@ -580,7 +586,7 @@ void Application::Start() {
             SetDeviceState(kDeviceStateIdle);
         });
     });
-    protocol_->OnIncomingJson([this, display](const cJSON* root) {
+    protocol_->OnIncomingJson([this, display](const cJSON* root) {   
         // Parse JSON data
         auto type = cJSON_GetObjectItem(root, "type");
         if (strcmp(type->valuestring, "tts") == 0) {
@@ -593,10 +599,13 @@ void Application::Start() {
                     }
                 });
             } else if (strcmp(state->valuestring, "stop") == 0) {
+
+               
                 Schedule([this]() {
                     background_task_->WaitForCompletion();
                     if (device_state_ == kDeviceStateSpeaking) {
                         if (listening_mode_ == kListeningModeManualStop) {
+                            ESP_LOGI(TAG,"tts stop,DeviceStateIdle");
                             SetDeviceState(kDeviceStateIdle);
                         } else {
                             SetDeviceState(kDeviceStateListening);
@@ -728,7 +737,7 @@ void Application::Start() {
 
             if (device_state_ == kDeviceStateIdle) {
                 wake_word_->EncodeWakeWordData();
-
+                has_hello_json_ = true;
                 if (!protocol_->IsAudioChannelOpened()) {
                     SetDeviceState(kDeviceStateConnecting);
                     if (!protocol_->OpenAudioChannel()) {
@@ -762,6 +771,44 @@ void Application::Start() {
         });
     });
     wake_word_->StartDetection();
+    ld2410_ = std::make_unique<ld2410>();
+    ld2410_->write_ld2410_parameter();
+    ld2410_->set_wake_callback([this](const std::string& wake_word){ 
+        this-> wake_word_->StopDetection();
+        Schedule([this,&wake_word](){
+            if (!protocol_) {
+                return;
+            }
+            if (device_state_ == kDeviceStateIdle) {
+
+                if (!protocol_->IsAudioChannelOpened()) {
+                    SetDeviceState(kDeviceStateConnecting);
+                    if (!protocol_->OpenAudioChannel()) {
+                        wake_word_->StartDetection();
+                        return;
+                    }
+                }
+
+                ESP_LOGI(TAG, "Asr wake word detected: %s", wake_word.c_str());
+#if CONFIG_USE_AFE_WAKE_WORD
+                // Set the chat state to wake word detected
+                protocol_->SendWakeWordDetected(wake_word);
+#else
+                // Play the pop up sound to indicate the wake word is detected
+                // And wait 60ms to make sure the queue has been processed by audio task
+                ResetDecoder();
+                PlaySound(Lang::Sounds::P3_POPUP);
+                vTaskDelay(pdMS_TO_TICKS(60));
+#endif
+                SetListeningMode(aec_mode_ == kAecOff ? kListeningModeAutoStop : kListeningModeRealtime);
+            } else if (device_state_ == kDeviceStateSpeaking) {
+                AbortSpeaking(kAbortReasonWakeWordDetected);
+            } else if (device_state_ == kDeviceStateActivating) {
+                SetDeviceState(kDeviceStateIdle);
+            }
+        });
+
+    });
     ESP_LOGE(TAG,"thread running here!!!!!!!!!!!!");
     // Wait for the new version check to finish
     xEventGroupWaitBits(event_group_, CHECK_NEW_VERSION_DONE_EVENT, pdTRUE, pdFALSE, portMAX_DELAY);

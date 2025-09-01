@@ -35,7 +35,7 @@ private:
     EventGroupHandle_t event_group_handle_;
 
     std::string publish_topic_;
-
+    esp_timer_handle_t wake_timer_handle_;
     std::mutex channel_mutex_;
     Mqtt* mqtt_ = nullptr;
     Udp* udp_ = nullptr;

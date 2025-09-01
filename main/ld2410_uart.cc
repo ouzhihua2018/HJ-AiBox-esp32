@@ -13,7 +13,7 @@ static void uart_event_task(void *arg)
             switch (event.type)
             {
                 case UART_DATA:
-                    ESP_LOGW(TAG, "UART_DATA_EVENT");
+                    //ESP_LOGW(TAG, "UART_DATA_EVENT");
                     xEventGroupSetBits(ld2410_obj->uart_group_, LD2410_UART_DATA_AVAILABLE_EVENT);
                     break;
                 case UART_BREAK:
@@ -41,7 +41,7 @@ static void uart_data_task(void *arg)
     size_t len;
     
     Application& app = Application::GetInstance();
-    bool& hasboodbye = app.GetHasGoodByeJson();
+    bool& hasgoodbye = app.GetHasGoodByeJson();
     while (1)
     {   
         xEventGroupWaitBits(ld2410_obj->uart_group_, LD2410_UART_DATA_AVAILABLE_EVENT, pdTRUE, pdTRUE,portMAX_DELAY);
@@ -50,20 +50,20 @@ static void uart_data_task(void *arg)
         if (len > 0)
         {   
             uart_read_bytes(ld2410_obj->uart_port_num_, ld2410_obj->Rx_buffer_, len, portMAX_DELAY);
-            ESP_LOGW(TAG, "UART_DATA_RECEIVED: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x",ld2410_obj->Rx_buffer_[0],ld2410_obj->Rx_buffer_[1]
-                ,ld2410_obj->Rx_buffer_[2],ld2410_obj->Rx_buffer_[3],ld2410_obj->Rx_buffer_[4],ld2410_obj->Rx_buffer_[5]
-                ,ld2410_obj->Rx_buffer_[6],ld2410_obj->Rx_buffer_[7],ld2410_obj->Rx_buffer_[8],ld2410_obj->Rx_buffer_[9]);
+            // ESP_LOGW(TAG, "UART_DATA_RECEIVED: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x",ld2410_obj->Rx_buffer_[0],ld2410_obj->Rx_buffer_[1]
+            //     ,ld2410_obj->Rx_buffer_[2],ld2410_obj->Rx_buffer_[3],ld2410_obj->Rx_buffer_[4],ld2410_obj->Rx_buffer_[5]
+            //     ,ld2410_obj->Rx_buffer_[6],ld2410_obj->Rx_buffer_[7],ld2410_obj->Rx_buffer_[8],ld2410_obj->Rx_buffer_[9]);
         
             if(ld2410_obj->Rx_buffer_[0]  == 0x6E && ld2410_obj->Rx_buffer_[4] == 0x62)
             {   
                 if(ld2410_obj->config_status_) continue;; //配置写入过程上报数据不处理
-                ESP_LOGI(TAG, "Report data");
+                //ESP_LOGI(TAG, "Report data");
                 
                 if(app.GetDeviceState() == kDeviceStateIdle 
                 && (ld2410_obj->Rx_buffer_[1] == 0x02 || ld2410_obj->Rx_buffer_[1] == 0x03))
                 {
-                    
-                    if (hasboodbye) { //用户刚说过再见，本次拒绝唤醒
+                    ESP_LOGI(TAG, "hasboodbye:%d",hasgoodbye);
+                    if (hasgoodbye) { //用户刚说过再见，本次拒绝唤醒
                         continue;
                     }
                     if ((ld2410_obj->on_wake_word_detected_))  ld2410_obj->on_wake_word_detected_(ld2410_obj->wake_word_);

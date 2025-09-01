@@ -14,6 +14,17 @@
 
 MqttProtocol::MqttProtocol() {
     event_group_handle_ = xEventGroupCreate();
+    esp_timer_create_args_t clock_timer_args = {
+        .callback = [](void* arg) {
+            Application& app = Application::GetInstance();
+            app.has_goodbye_json_ = false;
+        },
+        .arg = this,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "wake_timer",
+        .skip_unhandled_events = true
+    };
+    esp_timer_create(&clock_timer_args, &wake_timer_handle_);
 }
 
 MqttProtocol::~MqttProtocol() {
@@ -43,7 +54,7 @@ bool MqttProtocol::StartMqttClient(bool report_error) {
     auto username = settings.GetString("username");
     auto password = settings.GetString("password");
     publish_topic_ = settings.GetString("publish_topic");
-
+   
     if (endpoint.empty()) {
         ESP_LOGW(TAG, "MQTT endpoint is not specified");
         if (report_error) {
@@ -76,6 +87,11 @@ bool MqttProtocol::StartMqttClient(bool report_error) {
             ParseServerHello(root);
         } else if (strcmp(type->valuestring, "goodbye") == 0) {
             auto session_id = cJSON_GetObjectItem(root, "session_id");
+            Application& app = Application::GetInstance();
+            app.has_hello_json_ = false;
+            app.has_goodbye_json_ = true;
+           
+            esp_timer_start_once(wake_timer_handle_,10*1000*1000); //10s后可再次毫米波唤醒
             ESP_LOGI(TAG, "Received goodbye message, session_id: %s", session_id ? session_id->valuestring : "null");
             if (session_id == nullptr || session_id_ == session_id->valuestring) {
                 Application::GetInstance().Schedule([this]() {

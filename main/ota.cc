@@ -46,8 +46,8 @@ std::string Ota::GetCheckVersionUrl() {
     if (url.empty()) {
         url = CONFIG_OTA_URL;
     }
-    url = "http://core.device.158box.com/xiaozhi/ota2/";
-    return url;
+    url = "https://api.tenclass.net/xiaozhi/ota/"; //https://api.tenclass.net/xiaozhi/ota/
+    return url; //http://core.device.158box.com/xiaozhi/ota2/
 }
 
 // 在 Ota 类中修改方法定义

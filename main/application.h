@@ -23,7 +23,7 @@
 #include "background_task.h"
 #include "audio_processor.h"
 #include "wake_word.h"
-
+#include "ld2410_uart.h"
 #define SCHEDULE_EVENT (1 << 0)
 #define SEND_AUDIO_EVENT (1 << 1)
 #define CHECK_NEW_VERSION_DONE_EVENT (1 << 2)
@@ -80,11 +80,14 @@ public:
     void SetAecMode(AecMode mode);
     AecMode GetAecMode() const { return aec_mode_; }
     BackgroundTask* GetBackgroundTask() const { return background_task_; }
-
+    bool& GetHasGoodByeJson();
+    bool has_goodbye_json_ = false;  //防止毫米波刚说完再见又重复唤醒
+    bool has_hello_json_ = false;   //用户语音唤醒，则对话流程不受毫米波控制
 private:
     Application();
     ~Application();
     lv_image_dsc_t qrcode_img ;
+    std::unique_ptr<ld2410> ld2410_;
     std::unique_ptr<WakeWord> wake_word_;
     std::unique_ptr<AudioProcessor> audio_processor_;
     Ota ota_;
