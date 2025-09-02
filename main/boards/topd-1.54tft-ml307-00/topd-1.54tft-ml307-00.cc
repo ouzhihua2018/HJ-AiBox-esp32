@@ -215,7 +215,7 @@ public:
     }
     
     virtual Led* GetLed() override {
-        static CircularStrip led(BUILTIN_LED_GPIO, 2);
+        static CircularStrip led(BUILTIN_LED_GPIO, 30);
         return &led;
     }
     
