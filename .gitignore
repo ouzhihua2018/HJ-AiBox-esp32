@@ -1,7 +1,5 @@
 tmp/
 components/
-managed_components/
-!managed_components/78_esp-ml307/
 build/
 .vscode/
 .devcontainer/
