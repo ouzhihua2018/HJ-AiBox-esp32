@@ -186,7 +186,7 @@ bool WebsocketProtocol::OpenAudioChannel() {
             app.has_hello_json_ = false;
             app.has_goodbye_json_ = true;
            
-        esp_timer_start_once(wake_timer_handle_,10*1000*1000); //10s后可再次毫米波唤醒
+        esp_timer_start_once(wake_timer_handle_,15*1000*1000); //10s后可再次毫米波唤醒
         if (on_audio_channel_closed_ != nullptr) {
             on_audio_channel_closed_();
         }

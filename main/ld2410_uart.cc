@@ -50,9 +50,9 @@ static void uart_data_task(void *arg)
         if (len > 0)
         {   
             uart_read_bytes(ld2410_obj->uart_port_num_, ld2410_obj->Rx_buffer_, len, portMAX_DELAY);
-            // ESP_LOGW(TAG, "UART_DATA_RECEIVED: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x",ld2410_obj->Rx_buffer_[0],ld2410_obj->Rx_buffer_[1]
-            //     ,ld2410_obj->Rx_buffer_[2],ld2410_obj->Rx_buffer_[3],ld2410_obj->Rx_buffer_[4],ld2410_obj->Rx_buffer_[5]
-            //     ,ld2410_obj->Rx_buffer_[6],ld2410_obj->Rx_buffer_[7],ld2410_obj->Rx_buffer_[8],ld2410_obj->Rx_buffer_[9]);
+            ESP_LOGW(TAG, "UART_DATA_RECEIVED: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x",ld2410_obj->Rx_buffer_[0],ld2410_obj->Rx_buffer_[1]
+                ,ld2410_obj->Rx_buffer_[2],ld2410_obj->Rx_buffer_[3],ld2410_obj->Rx_buffer_[4],ld2410_obj->Rx_buffer_[5]
+                ,ld2410_obj->Rx_buffer_[6],ld2410_obj->Rx_buffer_[7],ld2410_obj->Rx_buffer_[8],ld2410_obj->Rx_buffer_[9]);
         
             if(ld2410_obj->Rx_buffer_[0]  == 0x6E && ld2410_obj->Rx_buffer_[4] == 0x62)
             {   
@@ -176,8 +176,8 @@ bool ld2410::write_ld2410_parameter()
     
     // 通用参数写入
     result = false;
-    uint8_t parameter2[] = {0xFD,0XFC,0XFB,0XFA,0X26,0X00,0X70,0X00,0X05,0X00,0X0C,0X00,0X00,0X00,0X0A,0X00,0X00,0X00,0X00,0X00
-        ,0X06,0X00,0X0a,0X00,0X00,0X00,0X02,0X00,0X08,0X00,0X00,0X00,0X0C,0X00,0X05,0X00,0X00,0X00,0X0B,0X00,0X0a,0X00,0X00,0X00,0X04,0X03,0X02,0X01};
+    uint8_t parameter2[] = {0xFD,0XFC,0XFB,0XFA,0X26,0X00,0X70,0X00,0X05,0X00,0X08,0X00,0X00,0X00,0X0A,0X00,0X02,0X00,0X00,0X00
+        ,0X06,0X00,0X0a,0X00,0X00,0X00,0X02,0X00,0X08,0X00,0X00,0X00,0X0C,0X00,0X08,0X00,0X00,0X00,0X0B,0X00,0X0a,0X00,0X00,0X00,0X04,0X03,0X02,0X01};
     param_len = sizeof(parameter2) / sizeof(parameter2[0]);
     for (int retry = 0; retry <5; ++retry) {
         const int bytes_written = uart_write_bytes(uart_port_num_, parameter2, param_len);
@@ -208,6 +208,10 @@ bool ld2410::write_ld2410_parameter()
         config_status_ = false;
         return result; // 发送失败返回
     }
+    
+    uint8_t parameter3[] = {0xFD,0XFC,0XFB,0XFA,0X02,0X00,0XFE,0X00,0X04,0X03,0X02,0X01};
+    param_len = sizeof(parameter3) / sizeof(parameter3[0]);
+    uart_write_bytes(uart_port_num_, parameter3, param_len);
     ESP_LOGW(TAG, "LD2410参数写入完成");
     config_status_ = false;
     return result;

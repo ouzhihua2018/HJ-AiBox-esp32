@@ -91,7 +91,7 @@ bool MqttProtocol::StartMqttClient(bool report_error) {
             app.has_hello_json_ = false;
             app.has_goodbye_json_ = true;
            
-            esp_timer_start_once(wake_timer_handle_,10*1000*1000); //10s后可再次毫米波唤醒
+            esp_timer_start_once(wake_timer_handle_,15*1000*1000); //15s后可再次毫米波唤醒
             ESP_LOGI(TAG, "Received goodbye message, session_id: %s", session_id ? session_id->valuestring : "null");
             if (session_id == nullptr || session_id_ == session_id->valuestring) {
                 Application::GetInstance().Schedule([this]() {
