@@ -28,6 +28,7 @@
 
 #include <cstring>
 #include <esp_log.h>
+#include <esp_app_desc.h>
 #include <cJSON.h>
 #include <driver/gpio.h>
 #include <arpa/inet.h>
@@ -100,9 +101,9 @@ Application::~Application() {
 }
 
 void Application::CheckNewVersion() {
-    const int MAX_RETRY = 10;
+    const int MAX_RETRY = 5; // 减少重试次数
     int retry_count = 0;
-    int retry_delay = 10; // 初始重试延迟为10秒
+    int retry_delay = 5; // 减少初始重试延迟
 
     while (true) {
         SetDeviceState(kDeviceStateActivating);
@@ -113,7 +114,9 @@ void Application::CheckNewVersion() {
             retry_count++;
             if (retry_count >= MAX_RETRY) {
                 ESP_LOGE(TAG, "Too many retries, exit version check");
-                return;
+                // 重试失败后，尝试直接进入激活流程
+                ESP_LOGW(TAG, "Attempting to proceed with activation despite version check failure");
+                break;
             }
 
             char buffer[128];
@@ -127,11 +130,11 @@ void Application::CheckNewVersion() {
                     break;
                 }
             }
-            retry_delay *= 2; // 每次重试后延迟时间翻倍
+            retry_delay = std::min(retry_delay * 2, 30); // 限制最大延迟为30秒
             continue;
         }
         retry_count = 0;
-        retry_delay = 10; // 重置重试延迟时间
+        retry_delay = 5; // 重置重试延迟时间
 
         if (ota_.HasNewVersion()) {
             Alert(Lang::Strings::OTA_UPGRADE, Lang::Strings::UPGRADING, "happy", Lang::Sounds::P3_UPGRADE);
@@ -174,7 +177,7 @@ void Application::CheckNewVersion() {
             return;
         }
 
-        // No new version, mark the current version as valid
+        // 无新版本：标记当前版本有效
         ota_.MarkCurrentVersionValid();
         
         // 是否已激活判断
@@ -188,27 +191,81 @@ void Application::CheckNewVersion() {
         display->SwitchToActivationStatusContainer();
       
         ESP_LOGW(TAG,"ota_.HasWeChatQrCodeUrl():%d",ota_.HasWeChatQrCodeUrl());
-        // QrCode is shown to the user and waiting for the user to input
+        
+        // 如果有二维码URL，显示二维码并等待用户扫描
         if (ota_.HasWeChatQrCodeUrl()) {
-            ShowWechatQrCode();
-        }
-       
-        /////////////////////////////////////////////////////
-        // This will block the loop until the activation is done or timeout
-        for (int i = 0; i < 10; ++i) {
-            ESP_LOGI(TAG, "Activating... %d/%d", i + 1, 10);
-            esp_err_t err = ota_.Activate();
-            if (err == ESP_OK) {
-                xEventGroupSetBits(event_group_, CHECK_NEW_VERSION_DONE_EVENT);
-                ESP_LOGI(TAG, "Activation successful!");
-                break;
-            } else if (err == ESP_ERR_TIMEOUT) {
-                vTaskDelay(pdMS_TO_TICKS(3000));
-            } else {
-                vTaskDelay(pdMS_TO_TICKS(10000));
+            ShowQrCode();
+            
+            // 设置设备状态为激活中，显示二维码等待扫描
+            SetDeviceState(kDeviceStateActivating);
+            display->SetStatus("请扫码关联设备");
+            
+            // 持续检查激活状态，直到用户扫描关联设备
+            ESP_LOGI(TAG, "QR code displayed, waiting for user to scan and associate device...");
+            
+            // 无限循环等待用户扫描，直到设备状态改变或激活成功
+            while (device_state_ == kDeviceStateActivating) {
+                // 每30秒重新检查一次激活状态
+                vTaskDelay(pdMS_TO_TICKS(30000));
+                
+                // 重新获取版本信息以检查激活状态
+                if (ota_.CheckVersion()) {
+                    // 如果不再有激活码和激活挑战，说明设备已关联
+                    if (!ota_.HasActivationCode() && !ota_.HasActivationChallenge()) {
+                        ESP_LOGI(TAG, "Device association detected!");
+                        
+                        // 激活成功，刷新页面并进入正常对话界面
+                        RefreshToNormalInterface();
+                        
+                        xEventGroupSetBits(event_group_, CHECK_NEW_VERSION_DONE_EVENT);
+                        break;
+                    }
+                }
+                
+                // 检查用户是否取消了激活
+                if (device_state_ == kDeviceStateIdle) {
+                    ESP_LOGI(TAG, "User cancelled activation");
+                    break;
+                }
             }
-            if (device_state_ == kDeviceStateIdle) {
-                break;
+        } else {
+            // 没有二维码URL，使用传统的激活方式
+            /////////////////////////////////////////////////////
+            // This will block the loop until the activation is done or timeout
+            const int MAX_ACTIVATION_ATTEMPTS = 6; // 减少激活尝试次数
+            const int ACTIVATION_TIMEOUT_SEC = 5; // 每次激活超时时间
+            
+            for (int i = 0; i < MAX_ACTIVATION_ATTEMPTS; ++i) {
+                ESP_LOGI(TAG, "Activating... %d/%d", i + 1, MAX_ACTIVATION_ATTEMPTS);
+                
+                // 检查设备状态，如果用户取消了激活，直接退出
+                if (device_state_ == kDeviceStateIdle) {
+                    ESP_LOGI(TAG, "User cancelled activation");
+                    break;
+                }
+                
+                esp_err_t err = ota_.Activate();
+                if (err == ESP_OK) {
+                    ESP_LOGI(TAG, "Activation successful!");
+                    
+                    // 激活成功，刷新页面并进入正常对话界面
+                    RefreshToNormalInterface();
+                    
+                    xEventGroupSetBits(event_group_, CHECK_NEW_VERSION_DONE_EVENT);
+                    break;
+                } else if (err == ESP_ERR_TIMEOUT) {
+                    ESP_LOGI(TAG, "Activation timeout, retrying in %d seconds", ACTIVATION_TIMEOUT_SEC);
+                    vTaskDelay(pdMS_TO_TICKS(ACTIVATION_TIMEOUT_SEC * 1000));
+                } else {
+                    ESP_LOGE(TAG, "Activation failed, retrying in %d seconds", ACTIVATION_TIMEOUT_SEC * 2);
+                    vTaskDelay(pdMS_TO_TICKS(ACTIVATION_TIMEOUT_SEC * 2000));
+                }
+            }
+            
+            // 如果激活失败，设置事件并退出
+            if (device_state_ != kDeviceStateIdle) {
+                ESP_LOGW(TAG, "Activation attempts exhausted, proceeding anyway");
+                xEventGroupSetBits(event_group_, CHECK_NEW_VERSION_DONE_EVENT);
             }
         }
     }
@@ -222,7 +279,7 @@ void Application::ShowActivationCode() {
         char digit;
         const std::string_view& sound;
     };
-    static const std::array<digit_sound, 10> digit_sounds{{
+    static const std::array<digit_sound, 10> digit_sounds{
         digit_sound{'0', Lang::Sounds::P3_0},
         digit_sound{'1', Lang::Sounds::P3_1}, 
         digit_sound{'2', Lang::Sounds::P3_2},
@@ -233,7 +290,7 @@ void Application::ShowActivationCode() {
         digit_sound{'7', Lang::Sounds::P3_7},
         digit_sound{'8', Lang::Sounds::P3_8},
         digit_sound{'9', Lang::Sounds::P3_9}
-    }};
+    };
 
     // This sentence uses 9KB of SRAM, so we need to wait for it to finish
     Alert(Lang::Strings::ACTIVATION, message.c_str(), "happy", Lang::Sounds::P3_ACTIVATION);
@@ -247,18 +304,27 @@ void Application::ShowActivationCode() {
     }
 }
 
-void Application::ShowWechatQrCode() {
-    auto& message = ota_.GetActivationMessage();
+void Application::ShowQrCode() {
     //Download Qrcode
     if(!ota_.Download_Qrcode()){
         ESP_LOGE(TAG,"wechat_qrcode_download_fail");
-        return ;
+        return;
     }
     ESP_LOGI(TAG,"=============================================");
     ESP_LOGI(TAG,"The QR code was successfully downloaded.");
+    
     //show Qrcode
     auto& board = Board::GetInstance();
     auto display = board.GetDisplay();
+    
+    // 获取固件版本信息
+    auto app_desc = esp_app_get_description();
+    std::string version_info = "v";
+    version_info += app_desc->version;
+    
+    // 在顶部中间位置显示固件版本
+    display->SetStatus(version_info.c_str());
+    
     // 正确代码：获取引用后取指针           //careful 若返回非引用，临时string的c_str()会被释放
     const std::string& qr_data = ota_.GetWechatQrData(); // 引用指向有效内存
     const char* png_image = qr_data.c_str(); 
@@ -274,10 +340,6 @@ void Application::ShowWechatQrCode() {
     ESP_LOGI(TAG,"The QR code was show completed.");
 
     PlaySound(Lang::Sounds::P3_ACTIVATION_QRCODE);
-    // This sentence uses 9KB of SRAM, so we need to wait for it to finish
-    //Alert(Lang::Strings::ACTIVATION, message.c_str(), "happy", Lang::Sounds::P3_ACTIVATION);
-
-    
 }
 
 void Application::Alert(const char* status, const char* message, const char* emotion, const std::string_view& sound) {
@@ -456,14 +518,14 @@ void Application::Start() {
 
     /* Start the clock timer to update the status bar */
     esp_timer_start_periodic(clock_timer_handle_, 1000000);
+
     ESP_LOGI(TAG,"startnetwork");
-    /* Wait for the network to be ready */
     board.StartNetwork();
 
     // Update the status bar immediately to show the network state
     display->UpdateStatusBar(true);
 
-    // Check for new firmware version or get the MQTT broker address
+    // Check for new firmware version or get the MQTT/Websocket address
     CheckNewVersion();
 
     ESP_LOGI(TAG, "leave checknewversion");
@@ -1112,3 +1174,37 @@ void Application::SetAecMode(AecMode mode) {
         }
     });
 }
+
+void Application::RefreshToNormalInterface() {
+    ESP_LOGI(TAG, "Refreshing to normal interface after activation");
+    
+    auto& board = Board::GetInstance();
+    auto display = board.GetDisplay();
+    
+    // 设置设备状态为空闲
+    SetDeviceState(kDeviceStateIdle);
+    
+    // 切换到正常对话界面
+    display->SwitchToGifContainer();
+    
+    // 设置正常状态显示
+    display->SetStatus(Lang::Strings::STANDBY);
+    display->SetEmotion("neutral");
+    display->SetChatMessage("system", "");
+    
+    // 播放激活成功提示音
+    PlaySound(Lang::Sounds::P3_SUCCESS);
+    
+    // 显示激活成功通知
+    display->ShowNotification("设备激活成功！", 3000);
+    
+    ESP_LOGI(TAG, "Normal interface refresh completed");
+}
+
+
+
+
+
+
+
+
