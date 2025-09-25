@@ -109,7 +109,7 @@ void HJEmojiDisplay::SetupGifContainer() {
     lv_obj_set_style_bg_opa(emotion_gif_, LV_OPA_TRANSP, 0);
     lv_obj_center(emotion_gif_);
     lv_gif_set_src(emotion_gif_, &staticstate);
-
+    lv_image_set_scale(emotion_gif_,128);
     chat_message_label_ = lv_label_create(content_);
     lv_label_set_text(chat_message_label_, "");
     lv_obj_set_width(chat_message_label_, LV_HOR_RES * 0.9);

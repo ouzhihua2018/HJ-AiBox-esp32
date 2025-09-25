@@ -226,6 +226,7 @@ public:
         static CircularStrip led(BUILTIN_LED_GPIO, 2);
         return &led;
     }
+
     virtual AudioCodec* GetAudioCodec() override {
 #ifdef AUDIO_I2S_METHOD_SIMPLEX
         static NoAudioCodecSimplex audio_codec(AUDIO_INPUT_SAMPLE_RATE, AUDIO_OUTPUT_SAMPLE_RATE,
