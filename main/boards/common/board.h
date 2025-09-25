@@ -37,9 +37,11 @@ public:
     virtual std::string GetUuid() { return uuid_; }
     virtual Backlight* GetBacklight() { return nullptr; }
     virtual Led* GetLed();
+    virtual Led* GetLed2();
     virtual AudioCodec* GetAudioCodec() = 0;
     virtual bool GetTemperature(float& esp32temp);
     virtual Display* GetDisplay();
+
     virtual Camera* GetCamera();
     virtual Http* CreateHttp() = 0;
     virtual WebSocket* CreateWebSocket() = 0;

@@ -26,6 +26,7 @@
 #define AUDIO_I2S_GPIO_DOUT GPIO_NUM_7
 
 #endif
+#define BUILTIN_LED2_GPIO       GPIO_NUM_44   //原毫米波接口RX
 
 #define BUILTIN_LED_GPIO        GPIO_NUM_48
 #define BOOT_BUTTON_GPIO        GPIO_NUM_0

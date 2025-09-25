@@ -57,6 +57,7 @@ Display* Board::GetDisplay() {
     return &display;
 }
 
+
 Camera* Board::GetCamera() {
     return nullptr;
 }
@@ -66,6 +67,10 @@ Led* Board::GetLed() {
     return &led;
 }
 
+Led* Board::GetLed2() {
+    static NoLed led;
+    return &led;
+}
 std::string Board::GetJson() {
     /* 
         {

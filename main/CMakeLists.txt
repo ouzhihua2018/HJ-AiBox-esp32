@@ -22,7 +22,6 @@ set(SOURCES "audio_codecs/audio_codec.cc"
             "ota.cc"
             "settings.cc"
             "background_task.cc"
-            "LD2410.cc"
             "main.cc"
             )
 
