@@ -419,8 +419,7 @@ void Application::Start() {
 #endif
 
     /* Start the clock timer to update the status bar */
-    esp_timer_start_periodic(clock_timer_handle_, 1000000);
-
+    esp_timer_start_periodic(clock_timer_handle_, 1000000); 
     /* Wait for the network to be ready */
     board.StartNetwork();
 

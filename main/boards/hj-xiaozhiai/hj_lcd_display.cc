@@ -110,9 +110,11 @@ void HJEmojiDisplay::SetupGifContainer() {
     lv_obj_center(emotion_gif_);
     lv_gif_set_src(emotion_gif_, &staticstate);
     lv_image_set_scale(emotion_gif_,128);
+
     chat_message_label_ = lv_label_create(content_);
     lv_label_set_text(chat_message_label_, "");
     lv_obj_set_width(chat_message_label_, LV_HOR_RES * 0.9);
+
     lv_label_set_long_mode(chat_message_label_, LV_LABEL_LONG_SCROLL_CIRCULAR);
     lv_obj_set_style_text_align(chat_message_label_, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_color(chat_message_label_, lv_color_white(), 0);
