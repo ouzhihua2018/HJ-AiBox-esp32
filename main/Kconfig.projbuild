@@ -238,7 +238,7 @@ choice BOARD_TYPE
     config BOARD_TYPE_ESP_S3_LCD_EV_Board
         bool "乐鑫ESP S3 LCD EV Board开发板"
         depends on IDF_TARGET_ESP32S3
-    config BOARD_TYPE_ZHENGCHEN_1_54TFT_WIFI
+    config BOARD_TYPE_ZHENGCHEN_1_54TFT_WIFI    
         bool "征辰科技1.54(WIFI)"
         depends on IDF_TARGET_ESP32S3
     config BOARD_TYPE_ZHENGCHEN_1_54TFT_ML307
@@ -266,6 +266,8 @@ choice BOARD_TYPE
     config BOARD_TYPE_HJ_XIAOZHIAI
         bool "huijin_xiaozhiai"
         depends on IDF_TARGET_ESP32S3
+        select LV_USE_GIF
+        select LV_GIF_CACHE_DECODE_DATA
 endchoice
 
 
