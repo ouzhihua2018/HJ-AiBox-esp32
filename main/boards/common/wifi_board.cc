@@ -165,9 +165,9 @@ std::string WifiBoard::GetBoardJson() {
     return board_json;
 }
 
-void WifiBoard::SetPowerSaveMode(bool enabled) {
+void WifiBoard::SetPowerSaveMode(bool enabled) { 
     auto& wifi_station = WifiStation::GetInstance();
-    wifi_station.SetPowerSaveMode(enabled);
+    wifi_station.SetPowerSaveMode(enabled); //只是进入保活模式，即关闭RF射频模块
 }
 
 void WifiBoard::ResetWifiConfiguration() {

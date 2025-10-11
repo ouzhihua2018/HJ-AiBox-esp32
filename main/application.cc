@@ -12,20 +12,8 @@
 #include "mcp_server.h"
 #include "sample.h"
 #include "settings.h"
-#if CONFIG_USE_AUDIO_PROCESSOR
 #include "afe_audio_processor.h"
-#else
-#include "no_audio_processor.h"
-#endif
-
-#if CONFIG_USE_AFE_WAKE_WORD
 #include "afe_wake_word.h"
-#elif CONFIG_USE_ESP_WAKE_WORD
-#include "esp_wake_word.h"
-#else
-#include "no_wake_word.h"
-#endif
-
 #include <cstring>
 #include <esp_log.h>
 #include <esp_app_desc.h>
@@ -52,30 +40,16 @@ static const char* const STATE_STRINGS[] = {
 
 Application::Application() {
     event_group_ = xEventGroupCreate();
-    background_task_ = new BackgroundTask(4096 * 7);
+    background_task_ = new BackgroundTask(4096 * 7); //仅用于编解码音频
 
-#if CONFIG_USE_DEVICE_AEC
-    aec_mode_ = kAecOnDeviceSide;
-#elif CONFIG_USE_SERVER_AEC
-    aec_mode_ = kAecOnServerSide;
-#else
+    //失能回声消除
     aec_mode_ = kAecOff;
-#endif
-
-#if CONFIG_USE_AUDIO_PROCESSOR
+    //使用AFE 处理对话音频  
     audio_processor_ = std::make_unique<AfeAudioProcessor>();
-#else
-    audio_processor_ = std::make_unique<NoAudioProcessor>();
-#endif
+    //使用AFE 唤醒词唤醒
+    //wake_word_ = std::make_unique<AfeWakeWord>();
 
-#if CONFIG_USE_AFE_WAKE_WORD
-    wake_word_ = std::make_unique<AfeWakeWord>();
-#elif CONFIG_USE_ESP_WAKE_WORD
-    wake_word_ = std::make_unique<EspWakeWord>();
-#else
-    wake_word_ = std::make_unique<NoWakeWord>();
-#endif
-
+    //创建定时器，用于更新状态栏，包括从RTC读取系统时间更新至状态栏
     esp_timer_create_args_t clock_timer_args = {
         .callback = [](void* arg) {
             Application* app = (Application*)arg;
@@ -149,7 +123,7 @@ void Application::CheckNewVersion() {
 
             auto& board = Board::GetInstance();
             board.SetPowerSaveMode(false);
-            wake_word_->StopDetection();
+            //wake_word_->StopDetection();
             // 预先关闭音频输出，避免升级过程有音频操作
             auto codec = board.GetAudioCodec();
             codec->EnableInput(false);
@@ -477,7 +451,6 @@ void Application::Start() {
     SetDeviceState(kDeviceStateStarting);
 
     /* Setup the display */
-    ESP_LOGI(TAG,"GetDisplay");
     auto display = board.GetDisplay();
     
     /* Setup the audio codec */
@@ -672,7 +645,7 @@ void Application::Start() {
             ESP_LOGW(TAG, "Unknown message type: %s", type->valuestring);
         }
     });
-    bool protocol_started = protocol_->Start();
+    bool protocol_started = protocol_->Start(); //实例化协议客户端
 
     audio_processor_->Initialize(codec);
     audio_processor_->OnOutput([this](std::vector<int16_t>&& data) {
@@ -719,7 +692,7 @@ void Application::Start() {
             });
         }
     });
-
+    /*
     wake_word_->Initialize(codec);
     wake_word_->OnWakeWordDetected([this](const std::string& wake_word) {
         Schedule([this, &wake_word]() {
@@ -763,9 +736,9 @@ void Application::Start() {
         });
     });
     wake_word_->StartDetection();
-    ESP_LOGE(TAG,"thread running here!!!!!!!!!!!!");
-    // Wait for the new version check to finish
-    xEventGroupWaitBits(event_group_, CHECK_NEW_VERSION_DONE_EVENT, pdTRUE, pdFALSE, portMAX_DELAY);
+    */
+    // Wait for the new version check to finish，但我认为无意义这里
+    //xEventGroupWaitBits(event_group_, CHECK_NEW_VERSION_DONE_EVENT, pdTRUE, pdFALSE, portMAX_DELAY);
     SetDeviceState(kDeviceStateIdle);
 
     if (protocol_started) {
@@ -780,8 +753,8 @@ void Application::Start() {
     // Print heap stats
     SystemInfo::PrintHeapStats();
     
-    // Enter the main event loop
-    MainEventLoop();
+    // Enter the main event loop ，处理音频opus网络发送与调度器任务，调度器主要干一些杂活异步任务，比如状态切换，屏幕显示
+    MainEventLoop();   
 }
 
 void Application::OnClockTimer() {
@@ -850,10 +823,10 @@ void Application::MainEventLoop() {
 }
 
 // The Audio Loop is used to input and output audio data
-void Application::AudioLoop() {
-    auto codec = Board::GetInstance().GetAudioCodec();
+void Application::AudioLoop() {  //循环处理音频输入->将每帧送入AFE feed 一帧32ms
+    auto codec = Board::GetInstance().GetAudioCodec(); //音频输出->读出opus数据包，同步包与opus解码器采样率和帧间隔，送入背景任务解码播放
     while (true) {
-        OnAudioInput();
+        OnAudioInput();  
         if (codec->output_enabled()) {
             OnAudioOutput();
         }
@@ -869,8 +842,8 @@ void Application::OnAudioOutput() {
     auto codec = Board::GetInstance().GetAudioCodec();
     const int max_silence_seconds = 10;
 
-    std::unique_lock<std::mutex> lock(mutex_);
-    if (audio_decode_queue_.empty()) {
+    std::unique_lock<std::mutex> lock(mutex_); 
+    if (audio_decode_queue_.empty()) {  //长时间未有声音则失能输出
         // Disable the output if there is no audio data for a long time
         if (device_state_ == kDeviceStateIdle) {
             auto duration = std::chrono::duration_cast<std::chrono::seconds>(now - last_output_time_).count();
@@ -886,7 +859,7 @@ void Application::OnAudioOutput() {
     lock.unlock();
     audio_decode_cv_.notify_all();
 
-    // Synchronize the sample rate and frame duration
+    // Synchronize the sample rate and frame duration opus解码器与退出的包采样率和帧间隔同步
     SetDecodeSampleRate(packet.sample_rate, packet.frame_duration);
 
     busy_decoding_audio_ = true;
@@ -915,18 +888,19 @@ void Application::OnAudioOutput() {
         last_output_time_ = std::chrono::steady_clock::now();
     });
 }
-
+  //使用ASRPRO可能会导致服务器声纹识别无法使用
 void Application::OnAudioInput() {
-    if (wake_word_->IsDetectionRunning()) {
-        std::vector<int16_t> data;
-        int samples = wake_word_->GetFeedSize();
-        if (samples > 0) {
-            if (ReadAudio(data, 16000, samples)) {
-                wake_word_->Feed(data);
-                return;
-            }
-        }
-    }
+    // if (wake_word_->IsDetectionRunning()) {
+    //     std::vector<int16_t> data;
+    //     int samples = wake_word_->GetFeedSize(); //每帧输入feed的样本数 512
+        
+    //     if (samples > 0) {
+    //         if (ReadAudio(data, 16000, samples)) { 
+    //             wake_word_->Feed(data);
+    //             return;
+    //         }
+    //     }
+    // }
     if (audio_processor_->IsRunning()) {
         std::vector<int16_t> data;
         int samples = audio_processor_->GetFeedSize();
@@ -1015,7 +989,7 @@ void Application::SetDeviceState(DeviceState state) {
             display->SetStatus(Lang::Strings::STANDBY);
             display->SetEmotion("neutral");
             audio_processor_->Stop();
-            wake_word_->StartDetection();
+            //wake_word_->StartDetection();
             break;
         case kDeviceStateConnecting:
             display->SetStatus(Lang::Strings::CONNECTING);
@@ -1043,7 +1017,7 @@ void Application::SetDeviceState(DeviceState state) {
                 }
                 opus_encoder_->ResetState();
                 audio_processor_->Start();
-                wake_word_->StopDetection();
+                //wake_word_->StopDetection();
             }
             break;
         case kDeviceStateSpeaking:
@@ -1053,7 +1027,7 @@ void Application::SetDeviceState(DeviceState state) {
                 audio_processor_->Stop();
                 // Only AFE wake word can be detected in speaking mode
 #if CONFIG_USE_AFE_WAKE_WORD
-                wake_word_->StartDetection();
+                //wake_word_->StartDetection();
 #else
                 wake_word_->StopDetection();
 #endif

@@ -494,7 +494,6 @@ esp_err_t Ota::Activate() {
 
 bool Ota::Download_Qrcode()
 {   
-    Board& board = Board::GetInstance();
     //Get Wechat QrCode URL
     auto& Wechat_Qr_Code_Url = GetWechatQrCodeUrl();
     if(Wechat_Qr_Code_Url.data() == NULL){

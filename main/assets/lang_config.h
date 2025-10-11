@@ -137,7 +137,7 @@ namespace Lang {
         static_cast<const char*>(p3_activation_qrcode_start),
         static_cast<size_t>(p3_activation_qrcode_end - p3_activation_qrcode_start)
         };
-        
+
         extern const char p3_activation_start[] asm("_binary_activation_p3_start");
         extern const char p3_activation_end[] asm("_binary_activation_p3_end");
         static const std::string_view P3_ACTIVATION {

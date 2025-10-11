@@ -22,7 +22,7 @@
 #include "ota.h"
 #include "background_task.h"
 #include "audio_processor.h"
-#include "wake_word.h"
+//#include "wake_word.h"
 
 #define SCHEDULE_EVENT (1 << 0)
 #define SEND_AUDIO_EVENT (1 << 1)
@@ -85,7 +85,7 @@ private:
     Application();
     ~Application();
     lv_image_dsc_t qrcode_img ;
-    std::unique_ptr<WakeWord> wake_word_;
+    //std::unique_ptr<WakeWord> wake_word_;
     std::unique_ptr<AudioProcessor> audio_processor_;
     Ota ota_;
     std::mutex mutex_;
