@@ -18,7 +18,7 @@ static void IRAM_ATTR asr_gpio_isr(void* arg){
     int level = gpio_get_level(this_->gpio_num_);
     //ESP_LOGI(TAG,"GPIO%d ISR triggered, level: %d", this_->gpio_num_, level);
     
-    if(level == 1) {
+    if(level == 0) {
         xEventGroupSetBitsFromISR(this_->asr_eventgroup_, ASR_WAIT_BIT, NULL);
     }
 }
@@ -30,10 +30,10 @@ asr_pro::asr_pro(uint32_t active_level,gpio_num_t gpio_num):active_level_(active
 
     // GPIO 配置
     gpio_config_t io_conf = {}; //zero-initialize the config structure.
-    io_conf.intr_type = GPIO_INTR_POSEDGE; // 上升沿产生中断
+    io_conf.intr_type = GPIO_INTR_NEGEDGE; // 上升沿产生中断
     io_conf.pin_bit_mask = (1ULL << gpio_num_); // 使用构造函数传入的 GPIO 编号
     io_conf.mode = GPIO_MODE_INPUT; //set as input mode
-    io_conf.pull_up_en = GPIO_PULLUP_DISABLE; // 启用上拉，确保平时为高电平
+    io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
     io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
     gpio_config(&io_conf);
      // 先安装 GPIO 中断服务
