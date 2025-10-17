@@ -622,7 +622,7 @@ void Application::Start() {
                     voice_detected_ = false;
                 }
                 auto led = Board::GetInstance().GetLed();
-                led->OnStateChanged();
+                led->OnStateChanged();                     
                 auto led2 = Board::GetInstance().GetLed2();
                 led2->OnStateChanged();
             });

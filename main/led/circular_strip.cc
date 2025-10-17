@@ -189,7 +189,7 @@ void CircularStrip::OnStateChanged() {
         case kDeviceStateStarting: {
             StripColor low = { 0, 0, 0 };
             StripColor high = { low_brightness_, low_brightness_, default_brightness_ };
-            Scroll(low, high, 3, 100);
+            Scroll(low, high, 41, 100);
             break;
         }
         case kDeviceStateWifiConfiguring: {
