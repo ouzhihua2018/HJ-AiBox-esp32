@@ -227,7 +227,7 @@ public:
         return &led;
     }
     virtual Led* GetLed2() override {
-        static CircularStrip led(BUILTIN_LED2_GPIO, 43);
+        static CircularStrip led(BUILTIN_LED2_GPIO, 41);
         return &led;
     }
     virtual AudioCodec* GetAudioCodec() override {
