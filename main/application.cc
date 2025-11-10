@@ -11,6 +11,15 @@
 #include "assets/lang_config.h"
 #include "mcp_server.h"
 #include "audio_debugger.h"
+#include "settings.h"
+
+
+
+#include <cstring>
+#include <cmath>
+#include <algorithm>
+
+#define TAG "Application"
 
 #if CONFIG_USE_AUDIO_PROCESSOR
 #include "afe_audio_processor.h"
@@ -34,7 +43,7 @@
 #include <cJSON.h>
 #include <driver/gpio.h>
 #include <arpa/inet.h>
-
+#include "led/circular_strip.h"
 #define TAG "Application"
 
 
@@ -481,7 +490,8 @@ void Application::Start() {
         });
     });
     protocol_->OnIncomingJson([this, display](const cJSON* root) {
-        // Parse JSON data
+        ESP_LOGW(TAG,"IncomingJson:%s",cJSON_Print(root));
+        // Parse JSON data  
         auto type = cJSON_GetObjectItem(root, "type");
         if (strcmp(type->valuestring, "tts") == 0) {
             auto state = cJSON_GetObjectItem(root, "state");
@@ -530,6 +540,7 @@ void Application::Start() {
 #if CONFIG_IOT_PROTOCOL_MCP
         } else if (strcmp(type->valuestring, "mcp") == 0) {
             auto payload = cJSON_GetObjectItem(root, "payload");
+           
             if (cJSON_IsObject(payload)) {
                 McpServer::GetInstance().ParseMessage(payload);
             }
@@ -712,7 +723,7 @@ void Application::Start() {
     
     // Wait for the new version check to finish
     xEventGroupWaitBits(event_group_, CHECK_NEW_VERSION_DONE_EVENT, pdTRUE, pdFALSE, portMAX_DELAY);
-    SetDeviceState(kDeviceStateIdle);
+    
 
     if (protocol_started) {
         std::string message = std::string(Lang::Strings::VERSION) + ota_.GetCurrentVersion();
@@ -722,7 +733,8 @@ void Application::Start() {
         ResetDecoder();
         PlaySound(Lang::Sounds::P3_SUCCESS);
     }
-
+    vTaskDelay(pdMS_TO_TICKS(200));
+    SetDeviceState(kDeviceStateIdle);
     // Print heap stats
     SystemInfo::PrintHeapStats();
     
@@ -849,6 +861,13 @@ void Application::OnAudioOutput() {
         if (!opus_decoder_->Decode(std::move(packet.payload), pcm)) {
             return;
         }
+        
+        // 计算音频能量并更新LED灯条
+        if(kDeviceStateSpeaking == this->GetDeviceState()){
+            float audio_level = CalculateAudioRMS(pcm);
+            UpdateLedWithAudioLevel(audio_level);
+        }
+        
         // Resample if the sample rate is different
         if (opus_decoder_->sample_rate() != codec->output_sample_rate()) {
             int target_size = output_resampler_.GetOutputSamples(pcm.size());
@@ -956,7 +975,7 @@ void Application::SetDeviceState(DeviceState state) {
     clock_ticks_ = 0;
     auto previous_state = device_state_;
     device_state_ = state;
-    ESP_LOGI(TAG, "STATE: %s", STATE_STRINGS[device_state_]);
+    ESP_LOGW(TAG, "STATE: %s", STATE_STRINGS[device_state_]);
     // The state is changed, wait for all background tasks to finish
     background_task_->WaitForCompletion();
 
@@ -964,6 +983,7 @@ void Application::SetDeviceState(DeviceState state) {
     auto display = board.GetDisplay();
     auto led = board.GetLed();
     led->OnStateChanged();
+   
     auto led2 = board.GetLed2();
     led2->OnStateChanged();
     switch (state) {
@@ -1061,6 +1081,80 @@ void Application::UpdateIotStates() {
 void Application::Reboot() {
     ESP_LOGI(TAG, "Rebooting...");
     esp_restart();
+}
+
+float Application::CalculateAudioRMS(const std::vector<int16_t>& audio_data) {
+    if (audio_data.empty()) {
+        return 0.0f;
+    }
+
+    // 计算均方根(RMS)值
+    // audio_data中的每个元素是一个16位音频采样点
+    // 对于60ms的音频帧，大约有960个采样点(16000Hz采样率 * 0.06s)
+    int64_t sum_squares = 0;
+    for (const auto& sample : audio_data) {
+        sum_squares += static_cast<int64_t>(sample) * sample;
+    }
+
+    return std::sqrt(static_cast<float>(sum_squares) / audio_data.size());
+}
+
+void Application::UpdateLedWithAudioLevel(float rms_value) {
+    // 获取LED设备
+    auto& board = Board::GetInstance();
+    auto led = static_cast<CircularStrip*>(board.GetLed2()); // 使用第二个LED灯条
+    
+    if (led == nullptr) {
+        return;
+    }
+    
+    // 将RMS值映射到颜色和亮度 (0-100%)
+    // 假设最大RMS值为10000 (经验值，可根据实际情况调整)
+    float normalized_level = std::min(1.0f, rms_value / 10000.0f);
+    
+    // 根据音频能量计算RGB颜色，实现更丰富的颜色变化
+    // 低能量时显示绿色，中低能量显示青色，中等能量显示蓝色，
+    // 中高能量显示紫色，高能量显示红色
+    StripColor color;
+    if (normalized_level < 0.2f) {
+        // 绿色到青色过渡 (0-20%音量)
+        float ratio = normalized_level / 0.2f;
+        color.red = 0;
+        color.green = 255;
+        color.blue = static_cast<uint8_t>(255 * ratio);
+    } else if (normalized_level < 0.4f) {
+        // 青色到蓝色过渡 (20-40%音量)
+        float ratio = (normalized_level - 0.2f) / 0.2f;
+        color.red = 0;
+        color.green = static_cast<uint8_t>(255 * (1 - ratio));
+        color.blue = 255;
+    } else if (normalized_level < 0.6f) {
+        // 蓝色到紫色过渡 (40-60%音量)
+        float ratio = (normalized_level - 0.4f) / 0.2f;
+        color.red = static_cast<uint8_t>(255 * ratio);
+        color.green = 0;
+        color.blue = 255;
+    } else if (normalized_level < 0.8f) {
+        // 紫色到红色过渡 (60-80%音量)
+        float ratio = (normalized_level - 0.6f) / 0.2f;
+        color.red = 255;
+        color.green = 0;
+        color.blue = static_cast<uint8_t>(255 * (1 - ratio));
+    } else {
+        // 红色到白色过渡 (80-100%音量)
+        float ratio = (normalized_level - 0.8f) / 0.2f;
+        color.red = 255;
+        color.green = static_cast<uint8_t>(255 * ratio);
+        color.blue = static_cast<uint8_t>(255 * ratio);
+    }
+    
+    // 调整亮度
+    color.red = static_cast<uint8_t>(color.red * normalized_level);
+    color.green = static_cast<uint8_t>(color.green * normalized_level);
+    color.blue = static_cast<uint8_t>(color.blue * normalized_level);
+    
+    // 点亮所有LED
+    led->SetAllColor(color);
 }
 
 void Application::WakeWordInvoke(const std::string& wake_word) {

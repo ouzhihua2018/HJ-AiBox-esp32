@@ -15,7 +15,7 @@ DualNetworkBoard::DualNetworkBoard(gpio_num_t ml307_tx_pin, gpio_num_t ml307_rx_
     
     // 从Settings加载网络类型
     network_type_ = LoadNetworkTypeFromSettings(default_net_type);
-    
+
     // 只初始化当前网络类型对应的板卡
     InitializeCurrentBoard();
 }
@@ -63,9 +63,10 @@ std::string DualNetworkBoard::GetBoardType() {
 
 void DualNetworkBoard::StartNetwork() {
     auto display = Board::GetInstance().GetDisplay();
-    
-    if (network_type_ == NetworkType::WIFI) {
+    Application& app = Application::GetInstance();
+    if (network_type_ == NetworkType::WIFI) {  //判断wifi板是否需要进入配网
         display->SetStatus(Lang::Strings::CONNECTING);
+        
     } else {
         display->SetStatus(Lang::Strings::DETECTING_MODULE);
     }

@@ -26,10 +26,12 @@ std::string Ml307Board::GetBoardType() {
 void Ml307Board::StartNetwork() {
     auto display = Board::GetInstance().GetDisplay();
     display->SetStatus(Lang::Strings::DETECTING_MODULE);
+    ESP_LOGW(TAG,"ML307BOARD");
+    auto& application = Application::GetInstance();
+    application.PlaySound(Lang::Sounds::P3_4G);
     modem_.SetDebug(false);
     modem_.SetBaudRate(921600);
 
-    auto& application = Application::GetInstance();
     // If low power, the material ready event will be triggered by the modem because of a reset
     modem_.OnMaterialReady([this, &application]() {
         ESP_LOGI(TAG, "ML307 material ready");

@@ -24,7 +24,7 @@ namespace Lang {
         constexpr const char* CONNECTED_TO = "已连接 ";
         constexpr const char* CONNECTING = "连接中...";
         constexpr const char* CONNECT_TO = "连接 ";
-        constexpr const char* CONNECT_TO_HOTSPOT = "连接热点 ";
+        constexpr const char* CONNECT_TO_HOTSPOT = "手机连接热点 ";
         constexpr const char* DETECTING_MODULE = "检测模组...";
         constexpr const char* ENTERING_WIFI_CONFIG_MODE = "进入配网模式...";
         constexpr const char* ERROR = "错误";
@@ -87,6 +87,13 @@ namespace Lang {
         static const std::string_view P3_3 {
         static_cast<const char*>(p3_3_start),
         static_cast<size_t>(p3_3_end - p3_3_start)
+        };
+
+        extern const char p3_4G_start[] asm("_binary_4G_p3_start");
+        extern const char p3_4G_end[] asm("_binary_4G_p3_end");
+        static const std::string_view P3_4G {
+        static_cast<const char*>(p3_4G_start),
+        static_cast<size_t>(p3_4G_end - p3_4G_start)
         };
 
         extern const char p3_4_start[] asm("_binary_4_p3_start");
@@ -159,11 +166,32 @@ namespace Lang {
         static_cast<size_t>(p3_exclamation_end - p3_exclamation_start)
         };
 
+        extern const char p3_limit_start[] asm("_binary_limit_p3_start");
+        extern const char p3_limit_end[] asm("_binary_limit_p3_end");
+        static const std::string_view P3_LIMIT {
+        static_cast<const char*>(p3_limit_start),
+        static_cast<size_t>(p3_limit_end - p3_limit_start)
+        };
+
         extern const char p3_low_battery_start[] asm("_binary_low_battery_p3_start");
         extern const char p3_low_battery_end[] asm("_binary_low_battery_p3_end");
         static const std::string_view P3_LOW_BATTERY {
         static_cast<const char*>(p3_low_battery_start),
         static_cast<size_t>(p3_low_battery_end - p3_low_battery_start)
+        };
+
+        extern const char p3_minus_start[] asm("_binary_minus_p3_start");
+        extern const char p3_minus_end[] asm("_binary_minus_p3_end");
+        static const std::string_view P3_MINUS {
+        static_cast<const char*>(p3_minus_start),
+        static_cast<size_t>(p3_minus_end - p3_minus_start)
+        };
+
+        extern const char p3_plus_start[] asm("_binary_plus_p3_start");
+        extern const char p3_plus_end[] asm("_binary_plus_p3_end");
+        static const std::string_view P3_PLUS {
+        static_cast<const char*>(p3_plus_start),
+        static_cast<size_t>(p3_plus_end - p3_plus_start)
         };
 
         extern const char p3_popup_start[] asm("_binary_popup_p3_start");
@@ -201,11 +229,25 @@ namespace Lang {
         static_cast<size_t>(p3_welcome_end - p3_welcome_start)
         };
 
+        extern const char p3_wifi_start[] asm("_binary_wifi_p3_start");
+        extern const char p3_wifi_end[] asm("_binary_wifi_p3_end");
+        static const std::string_view P3_WIFI {
+        static_cast<const char*>(p3_wifi_start),
+        static_cast<size_t>(p3_wifi_end - p3_wifi_start)
+        };
+
         extern const char p3_wificonfig_start[] asm("_binary_wificonfig_p3_start");
         extern const char p3_wificonfig_end[] asm("_binary_wificonfig_p3_end");
         static const std::string_view P3_WIFICONFIG {
         static_cast<const char*>(p3_wificonfig_start),
         static_cast<size_t>(p3_wificonfig_end - p3_wificonfig_start)
+        };
+
+        extern const char p3_wificonfigok_start[] asm("_binary_wificonfigok_p3_start");
+        extern const char p3_wificonfigok_end[] asm("_binary_wificonfigok_p3_end");
+        static const std::string_view P3_WIFICONFIGOK {
+        static_cast<const char*>(p3_wificonfigok_start),
+        static_cast<size_t>(p3_wificonfigok_end - p3_wificonfigok_start)
         };
     }
 }

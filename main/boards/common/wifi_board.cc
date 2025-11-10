@@ -38,9 +38,13 @@ std::string WifiBoard::GetBoardType() {
 
 void WifiBoard::EnterWifiConfigMode() {
     auto& application = Application::GetInstance();
-    application.SetDeviceState(kDeviceStateWifiConfiguring);
+    ESP_LOGI(TAG,"enter wificonfig");
     Display* display = Board::GetDisplay();
+
     auto& wifi_ap = WifiConfigurationAp::GetInstance();
+    wifi_ap.SetWifiConfigCallback([& application](){
+        application.PlaySound(Lang::Sounds::P3_WIFICONFIGOK);
+    });
     wifi_ap.SetLanguage(Lang::CODE);
     wifi_ap.SetSsidPrefix("Dingle");
     wifi_ap.Start();
@@ -53,9 +57,9 @@ void WifiBoard::EnterWifiConfigMode() {
     // hint += "\n\n";
     
     // 播报配置 WiFi 的提示
-    
     application.Alert(Lang::Strings::WIFI_CONFIG_MODE, hint.c_str(), "", Lang::Sounds::P3_WIFICONFIG);
-  
+    vTaskDelay(pdMS_TO_TICKS(200));
+    application.SetDeviceState(kDeviceStateWifiConfiguring);
     // Wait forever until reset after configuration
     while (true) {
         int free_sram = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
@@ -71,7 +75,8 @@ void WifiBoard::StartNetwork() {
         EnterWifiConfigMode();
         return;
     }
-
+    Application& app = Application::GetInstance();
+    app.PlaySound(Lang::Sounds::P3_WIFI);
     // If no WiFi SSID is configured, enter WiFi configuration mode
     auto& ssid_manager = SsidManager::GetInstance();
     auto ssid_list = ssid_manager.GetSsidList();

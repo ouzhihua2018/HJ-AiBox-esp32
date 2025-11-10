@@ -142,6 +142,10 @@ private:
     void OnClockTimer();
     void SetListeningMode(ListeningMode mode);
     void AudioLoop();
+    
+    // 音频能量计算相关函数
+    float CalculateAudioRMS(const std::vector<int16_t>& audio_data);
+    void UpdateLedWithAudioLevel(float rms_value);
 };
 
 #endif // _APPLICATION_H_

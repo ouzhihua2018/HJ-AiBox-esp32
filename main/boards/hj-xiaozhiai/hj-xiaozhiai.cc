@@ -148,13 +148,6 @@ private:
     void InitializeButtons() {
         boot_button_.OnClick([this]() {
             auto& app = Application::GetInstance();
-             if (GetNetworkType() == NetworkType::WIFI) {
-                if (app.GetDeviceState() == kDeviceStateStarting && !WifiStation::GetInstance().IsConnected()) {
-                    // cast to WifiBoard
-                    auto& wifi_board = static_cast<WifiBoard&>(GetCurrentBoard());
-                    wifi_board.ResetWifiConfiguration();
-                }
-            }
             app.ToggleChatState();
         });
         boot_button_.OnLongPress([this]() {
@@ -163,26 +156,42 @@ private:
                 SwitchNetworkType();
             
         });
+        
+        boot_button_.OnMultipleClick([this](){
+            if (GetNetworkType() == NetworkType::WIFI) {
+                auto& wifi_board = static_cast<WifiBoard&>(GetCurrentBoard());
+                wifi_board.ResetWifiConfiguration();
+            }
+        },3);
         volume_up_button_.OnClick([this]() {
             auto codec = GetAudioCodec();
+            auto& app = Application::GetInstance();
             auto volume = codec->output_volume() + 10;
             if (volume > 100) {
+                app.PlaySound(Lang::Sounds::P3_LIMIT);
                 volume = 100;
+            }else{
+                app.PlaySound(Lang::Sounds::P3_PLUS);
             }
             codec->SetOutputVolume(volume);
-            GetDisplay()->ShowNotification(Lang::Strings::VOLUME + std::to_string(volume));
+            GetDisplay()->ShowNotification(Lang::Strings::VOLUME + std::to_string(volume));   
         });
 
         volume_up_button_.OnLongPress([this]() {
             GetAudioCodec()->SetOutputVolume(100);
             GetDisplay()->ShowNotification(Lang::Strings::MAX_VOLUME);
+
         });
 
         volume_down_button_.OnClick([this]() {
             auto codec = GetAudioCodec();
+            auto& app = Application::GetInstance();
             auto volume = codec->output_volume() - 10;
             if (volume < 0) {
+                app.PlaySound(Lang::Sounds::P3_LIMIT);
                 volume = 0;
+            } else{
+                app.PlaySound(Lang::Sounds::P3_MINUS);
             }
             codec->SetOutputVolume(volume);
             GetDisplay()->ShowNotification(Lang::Strings::VOLUME + std::to_string(volume));

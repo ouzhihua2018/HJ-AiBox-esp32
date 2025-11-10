@@ -39,10 +39,11 @@ private:
     int blink_interval_ms_ = 0;
     esp_timer_handle_t strip_timer_ = nullptr;
     std::function<void()> strip_callback_ = nullptr;
-
+    bool on_ = true;
+    
     uint8_t default_brightness_ = DEFAULT_BRIGHTNESS;
     uint8_t low_brightness_ = LOW_BRIGHTNESS;
-
+    int offset_ = 0;
     void StartStripTask(int interval_ms, std::function<void()> cb);
     void Rainbow(StripColor low, StripColor high, int interval_ms);
     void FadeOut(int interval_ms);

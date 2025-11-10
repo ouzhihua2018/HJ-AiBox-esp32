@@ -11,6 +11,11 @@ CircularStrip::CircularStrip(gpio_num_t gpio, uint8_t max_leds) : max_leds_(max_
     assert(gpio != GPIO_NUM_NC);
 
     colors_.resize(max_leds_);
+    
+    // Initialize all colors to zero to ensure proper fadeout behavior
+    for (int i = 0; i < max_leds_; i++) {
+        colors_[i] = {0, 0, 0};
+    }
 
     led_strip_config_t strip_config = {};
     strip_config.strip_gpio_num = gpio;
@@ -71,8 +76,7 @@ void CircularStrip::Blink(StripColor color, int interval_ms) {
         colors_[i] = color;
     }
     StartStripTask(interval_ms, [this]() {
-        static bool on = true;
-        if (on) {
+        if (on_) {
             for (int i = 0; i < max_leds_; i++) {
                 led_strip_set_pixel(led_strip_, i, colors_[i].red, colors_[i].green, colors_[i].blue);
             }
@@ -80,7 +84,7 @@ void CircularStrip::Blink(StripColor color, int interval_ms) {
         } else {
             led_strip_clear(led_strip_);
         }
-        on = !on;
+        on_ = !on_;
     });
 }
 
@@ -88,9 +92,17 @@ void CircularStrip::FadeOut(int interval_ms) {
     StartStripTask(interval_ms, [this]() {
         bool all_off = true;
         for (int i = 0; i < max_leds_; i++) {
-            colors_[i].red /= 2;
-            colors_[i].green /= 2;
-            colors_[i].blue /= 2;
+            // 更积极的淡出策略，确保LED能够完全关闭
+            if (colors_[i].red > 0) {
+                colors_[i].red = (colors_[i].red > 2) ? colors_[i].red / 2 : 0;
+            }
+            if (colors_[i].green > 0) {
+                colors_[i].green = (colors_[i].green > 2) ? colors_[i].green / 2 : 0;
+            }
+            if (colors_[i].blue > 0) {
+                colors_[i].blue = (colors_[i].blue > 2) ? colors_[i].blue / 2 : 0;
+            }
+            
             if (colors_[i].red != 0 || colors_[i].green != 0 || colors_[i].blue != 0) {
                 all_off = false;
             }
@@ -148,19 +160,22 @@ void CircularStrip::Scroll(StripColor low, StripColor high, int length, int inte
         colors_[i] = low;
     }
     StartStripTask(interval_ms, [this, low, high, length]() {
-        static int offset = 0;
+        
+        
         for (int i = 0; i < max_leds_; i++) {
             colors_[i] = low;
         }
+        
         for (int j = 0; j < length; j++) {
-            int i = (offset + j) % max_leds_;
+            int i = (offset_ + j) % max_leds_;
             colors_[i] = high;
         }
+
         for (int i = 0; i < max_leds_; i++) {
             led_strip_set_pixel(led_strip_, i, colors_[i].red, colors_[i].green, colors_[i].blue);
         }
         led_strip_refresh(led_strip_);
-        offset = (offset + 1) % max_leds_;
+        offset_ = (offset_ + 1) % max_leds_;
     });
 }
 
@@ -188,40 +203,43 @@ void CircularStrip::OnStateChanged() {
     switch (device_state) {
         case kDeviceStateStarting: {
             StripColor low = { 0, 0, 0 };
-            StripColor high = { low_brightness_, low_brightness_, default_brightness_ };
-            Scroll(low, high, 41, 100);
-            break;
+            StripColor high = { default_brightness_, low_brightness_, low_brightness_ }; //开始时
+            Scroll(low, high, 3, 100);  //每间隔100ms去对所有灯做处理，每次熄灭一颗等，以实现跑马灯效果
+            ESP_LOGW(TAG, "start scroll");
+            break; 
         }
         case kDeviceStateWifiConfiguring: {
-            StripColor color = { low_brightness_, low_brightness_, default_brightness_ };
+            StripColor color = { default_brightness_, low_brightness_, low_brightness_ };
+            ESP_LOGW(TAG, "wifi config,red blink");
             Blink(color, 500);
             break;
         }
         case kDeviceStateIdle:
+            ESP_LOGW(TAG, "LED FADEOUT");
             FadeOut(50);
             break;
         case kDeviceStateConnecting: {
-            StripColor color = { low_brightness_, low_brightness_, default_brightness_ };
+            StripColor color = { default_brightness_, low_brightness_, low_brightness_ };  //网络连接中 红色
             SetAllColor(color);
             break;
         }
         case kDeviceStateListening: {
-            StripColor color = { default_brightness_, low_brightness_, low_brightness_ };
+            StripColor color = { low_brightness_ , default_brightness_, low_brightness_ }; //绿色
             SetAllColor(color);
             break;
         }
         case kDeviceStateSpeaking: {
-            StripColor color = { low_brightness_, default_brightness_, low_brightness_ };
+            StripColor color = { low_brightness_, low_brightness_, default_brightness_  }; //蓝色
             SetAllColor(color);
             break;
         }
         case kDeviceStateUpgrading: {
-            StripColor color = { low_brightness_, default_brightness_, low_brightness_ };
+            StripColor color = { default_brightness_, low_brightness_, low_brightness_ };  //升级时红色闪烁
             Blink(color, 100);
             break;
         }
         case kDeviceStateActivating: {
-            StripColor color = { low_brightness_, default_brightness_, low_brightness_ };
+            StripColor color = { default_brightness_, low_brightness_, low_brightness_ }; //激活中红色闪烁
             Blink(color, 500);
             break;
         }
