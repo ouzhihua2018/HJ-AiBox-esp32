@@ -21,14 +21,9 @@
 #include "ota.h"
 #include "background_task.h"
 #include "audio_processor.h"
-#include "wake_word.h"
 #include "audio_debugger.h"
+#include "micro_wake_word_detect.h"
 
-#ifdef CONFIG_HJ_ASR_LEVEL
-#include "asr_pro_level.h"
-#else 
-#include "asr_pro_uart.h"
-#endif
 
 
 #define SCHEDULE_EVENT (1 << 0)
@@ -91,9 +86,7 @@ public:
 private:
     Application();
     ~Application();
-
-    std::unique_ptr<WakeWord> wake_word_;
-    std::unique_ptr<asr_pro> asr_pro_;
+    std::unique_ptr<MicroWakeWordDetect> micro_wake_word_;
     std::unique_ptr<AudioProcessor> audio_processor_;
     std::unique_ptr<AudioDebugger> audio_debugger_;
     Ota ota_;

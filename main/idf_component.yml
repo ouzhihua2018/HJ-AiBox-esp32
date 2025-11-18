@@ -58,7 +58,8 @@ dependencies:
     version: '^0.1.4'
     rules:
     - if: target in [esp32c3]
-
+  micro_wake_word:
+    git: https://github.com/0xD34D/micro_wake_word_standalone.git
   ## Required IDF version
   idf:
     version: '>=5.4.0'
