@@ -34,7 +34,7 @@
 #define SCHEDULE_EVENT (1 << 0)
 #define SEND_AUDIO_EVENT (1 << 1)
 #define CHECK_NEW_VERSION_DONE_EVENT (1 << 2)
-
+#define AUDIO_CHANNEL_OPEN (1 << 3)
 enum AecMode {
     kAecOff,
     kAecOnDeviceSide,
@@ -81,17 +81,18 @@ public:
     void UpdateIotStates();
     void Reboot();
     void WakeWordInvoke(const std::string& wake_word);
+    void EmergencyWake();
     void PlaySound(const std::string_view& sound);
     bool CanEnterSleepMode();
     void SendMcpMessage(const std::string& payload);
     void SetAecMode(AecMode mode);
     AecMode GetAecMode() const { return aec_mode_; }
     BackgroundTask* GetBackgroundTask() const { return background_task_; }
-
+    
 private:
     Application();
     ~Application();
-
+    std::unique_ptr<Protocol> protocol_;
     std::unique_ptr<WakeWord> wake_word_;
     std::unique_ptr<asr_pro> asr_pro_;
     std::unique_ptr<AudioProcessor> audio_processor_;
@@ -99,7 +100,7 @@ private:
     Ota ota_;
     std::mutex mutex_;
     std::list<std::function<void()>> main_tasks_;
-    std::unique_ptr<Protocol> protocol_;
+    bool remind_mark_ = false ;
     EventGroupHandle_t event_group_ = nullptr;
     esp_timer_handle_t clock_timer_handle_ = nullptr;
     volatile DeviceState device_state_ = kDeviceStateUnknown;

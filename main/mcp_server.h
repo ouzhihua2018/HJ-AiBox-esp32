@@ -9,7 +9,7 @@
 #include <optional>
 #include <stdexcept>
 #include <thread>
-
+#include "protocol.h"
 #include <cJSON.h>
 
 // 添加类型别名
@@ -255,13 +255,13 @@ public:
         static McpServer instance;
         return instance;
     }
-
+    
     void AddCommonTools();
     void AddTool(McpTool* tool);
     void AddTool(const std::string& name, const std::string& description, const PropertyList& properties, std::function<ReturnValue(const PropertyList&)> callback);
     void ParseMessage(const cJSON* json);
     void ParseMessage(const std::string& message);
-
+    void OnIncomingRemindAudio(std::function<void(AudioStreamPacket&& packet)>callback);
 private:
     McpServer();
     ~McpServer();
@@ -276,6 +276,7 @@ private:
 
     std::vector<McpTool*> tools_;
     std::thread tool_call_thread_;
+    std::function<void(AudioStreamPacket &&packet)>  on_incoming_remind_audio_;
 };
 
 #endif // MCP_SERVER_H

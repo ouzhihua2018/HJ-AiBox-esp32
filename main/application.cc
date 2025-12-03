@@ -14,7 +14,6 @@
 #include "settings.h"
 
 
-
 #include <cstring>
 #include <cmath>
 #include <algorithm>
@@ -322,7 +321,6 @@ void Application::ToggleChatState() {
                     return;
                 }
             }
-
             SetListeningMode(aec_mode_ == kAecOff ? kListeningModeAutoStop : kListeningModeRealtime);
         });
     } else if (device_state_ == kDeviceStateSpeaking) {
@@ -417,7 +415,7 @@ void Application::Start() {
     xTaskCreatePinnedToCore([](void* arg) {
         Application* app = (Application*)arg;
         app->AudioLoop(); //循环处理输入输出数据，输入I2S读取送入wake_word、audio proc，输出 opus解码播放
-        vTaskDelete(NULL);
+        vTaskDelete(NULL);  //贴近codec这里
     }, "audio_loop", 4096 * 2, this, 8, &audio_loop_task_handle_, 1);
 #else
     xTaskCreate([](void* arg) {
@@ -460,6 +458,7 @@ void Application::Start() {
         Alert(Lang::Strings::ERROR, message.c_str(), "sad", Lang::Sounds::P3_EXCLAMATION);
     });
     protocol_->OnIncomingAudio([this](AudioStreamPacket&& packet) {
+        ESP_LOGI(TAG,"Audio comming");
         std::lock_guard<std::mutex> lock(mutex_);
         if (device_state_ == kDeviceStateSpeaking && audio_decode_queue_.size() < MAX_AUDIO_PACKETS_IN_QUEUE) {
             audio_decode_queue_.emplace_back(std::move(packet));
@@ -578,6 +577,47 @@ void Application::Start() {
             } else {
                 ESP_LOGW(TAG, "Alert command requires status, message and emotion");
             }
+            
+        } else if (strcmp(type->valuestring, "Hei") == 0) {
+            auto session_id = cJSON_GetObjectItem(root, "session_id");
+            auto state = cJSON_GetObjectItem(root, "state");
+            auto timestamp = cJSON_GetObjectItem(root, "timestamp");
+            if (cJSON_IsString(session_id) && cJSON_IsString(state) && cJSON_IsNumber(timestamp)) {
+                ESP_LOGW(TAG,"receive message: session_id %s",cJSON_GetStringValue(session_id));
+                 // 关键修复：提前提取「值」（拷贝到局部变量），而非捕获指针
+                std::string session_id_str = cJSON_GetStringValue(session_id); // 拷贝 session_id 字符串
+                int64_t timestamp_val = static_cast<int64_t>(timestamp->valuedouble); // 拷贝 timestamp 数值
+                Schedule([this,session_id_str,timestamp_val]() {
+                    std::string json_str = "{"
+                    "\"session_id\":\"" + session_id_str + "\","  // 复用输入的session_id
+                    "\"type\":\"Hei\"," + // 固定type为"Hei"
+                    "\"timestamp\":" + std::to_string(timestamp_val) + ",";
+                    
+                    if (!protocol_->IsAudioChannelOpened()) {
+                        SetDeviceState(kDeviceStateConnecting);
+                        if (!protocol_->OpenAudioChannel()) {
+                            json_str += "\"state\":\"error\",";
+                            json_str += "\"describe\":\"Failed to open audio channel\"";
+                            json_str += "}";
+                            protocol_->SendText(json_str);
+                            return;
+                        } else {
+                            json_str += "\"state\":\"success\",";
+                            json_str += "\"describe\":\"Successfully opened the audio channel\"";
+                            json_str += "}";
+                            SetDeviceState(kDeviceStateListening);
+                            protocol_->SendText(json_str);
+                            return;
+                        }
+                    } 
+                    json_str += "\"state\":\"success\",";
+                    json_str += "\"describe\":\"Successfully opened the audio channel\"";
+                    json_str += "}";
+                    protocol_->SendText(json_str);
+            });
+        } else {
+                ESP_LOGW(TAG, "Cjson format error");
+            }
         } else {
             ESP_LOGW(TAG, "Unknown message type: %s", type->valuestring);
         }
@@ -642,7 +682,7 @@ void Application::Start() {
 
     wake_word_->Initialize(codec);
     wake_word_->OnWakeWordDetected([this](const std::string& wake_word) {
-        Schedule([this, &wake_word]() {
+       [this, &wake_word]() {
             if (!protocol_) {
                 return;
             }
@@ -680,8 +720,8 @@ void Application::Start() {
             } else if (device_state_ == kDeviceStateActivating) {
                 SetDeviceState(kDeviceStateIdle);
             }
-        });
-    });
+        };});
+    
     wake_word_->StartDetection();
 
     asr_pro_->set_wake_callback([this](const std::string & wake_word){ 
@@ -739,7 +779,7 @@ void Application::Start() {
     SystemInfo::PrintHeapStats();
     
     // Enter the main event loop
-    MainEventLoop();
+    MainEventLoop(); //经过AFE处理后的音频发送任务和主要调度任务
 }
 
 void Application::OnClockTimer() {
@@ -762,6 +802,7 @@ void Application::OnClockTimer() {
                     time_t now = time(NULL);
                     char time_str[64];
                     strftime(time_str, sizeof(time_str), "%H:%M  ", localtime(&now));
+                   
                     Board::GetInstance().GetDisplay()->SetStatus(time_str);
                 });
             }
@@ -908,7 +949,7 @@ void Application::OnAudioInput() {
 
     vTaskDelay(pdMS_TO_TICKS(OPUS_FRAME_DURATION_MS / 2));
 }
-
+ 
 bool Application::ReadAudio(std::vector<int16_t>& data, int sample_rate, int samples) {
     auto codec = Board::GetInstance().GetAudioCodec();
     if (!codec->input_enabled()) {
@@ -1175,6 +1216,19 @@ void Application::WakeWordInvoke(const std::string& wake_word) {
                 protocol_->CloseAudioChannel();
             }
         });
+    }
+}
+
+void Application::EmergencyWake()
+{   
+    if(ota_.HasServerTime()){ //服务器同步过时间
+        struct timeval tv;
+        gettimeofday(&tv, NULL);
+        int64_t beijing_timestamp_ms  =(int64_t) tv.tv_sec * 1000 + (tv.tv_usec + 500) / 1000;
+        // 2. 东八区转 UTC：减去 8 小时（8×3600×1000 = 28800000 毫秒）
+        int64_t utc_timestamp_ms = beijing_timestamp_ms - 8 * 3600 * 1000;
+        std::string mac_address = SystemInfo::GetMacAddress();
+        protocol_->SendEmergencyMessage(utc_timestamp_ms,mac_address);
     }
 }
 

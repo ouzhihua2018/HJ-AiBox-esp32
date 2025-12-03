@@ -416,16 +416,12 @@ void WifiConfigurationAp::StartWebServer()
             httpd_resp_set_hdr(req, "Connection", "close");
             // 发送响应
             httpd_resp_send(req, "{\"success\":true}", HTTPD_RESP_USE_STRLEN);
-
-            if(this_->wificonfigcallback_){
-                this_->wificonfigcallback_();
-            }
+            
             // 创建一个延迟重启任务
             ESP_LOGI(TAG, "Rebooting...");
             xTaskCreate([](void *ctx) {
-                
                 // 等待200ms确保HTTP响应完全发送
-                vTaskDelay(pdMS_TO_TICKS(2000));
+                vTaskDelay(pdMS_TO_TICKS(200));
                 // 停止Web服务器
                 auto* self = static_cast<WifiConfigurationAp*>(ctx);
                 if (self->server_) {
@@ -679,12 +675,10 @@ void WifiConfigurationAp::Save(const std::string &ssid, const std::string &passw
     ESP_LOGI(TAG, "Save SSID %s %d", ssid.c_str(), ssid.length());
     SsidManager::GetInstance().AddSsid(ssid, password);
 }
-
 void WifiConfigurationAp::SetWifiConfigCallback(std::function<void()> wificonfigcallback)
 {
     wificonfigcallback_ = wificonfigcallback ; 
 }
-
 void WifiConfigurationAp::WifiEventHandler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data)
 {
     WifiConfigurationAp* self = static_cast<WifiConfigurationAp*>(arg);

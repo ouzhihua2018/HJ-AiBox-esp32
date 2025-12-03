@@ -55,7 +55,7 @@ void McpServer::AddCommonTools() {
             codec->SetOutputVolume(properties["volume"].value<int>());
             return true;
         });
-    
+   
     auto backlight = board.GetBacklight();
     if (backlight) {
         AddTool("self.screen.set_brightness",
@@ -130,6 +130,11 @@ void McpServer::ParseMessage(const std::string& message) {
     }
     ParseMessage(json);
     cJSON_Delete(json);
+}
+
+void McpServer::OnIncomingRemindAudio(std::function<void(AudioStreamPacket &&packet)> callback)
+{
+    on_incoming_remind_audio_ = callback; 
 }
 
 void McpServer::ParseCapabilities(const cJSON* capabilities) {

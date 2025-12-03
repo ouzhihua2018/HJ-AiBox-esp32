@@ -23,6 +23,16 @@ WebsocketProtocol::~WebsocketProtocol() {
     vEventGroupDelete(event_group_handle_);
 }
 
+bool WebsocketProtocol::SendEmptyPacket()
+{
+    if (websocket_ == nullptr) {
+        return false;
+    }
+
+    std::string packet;
+    packet.resize(1024);
+    return websocket_->Send(packet.data(), packet.size(), true);
+}
 bool WebsocketProtocol::Start() {
     // Only connect to server when audio channel is needed
     return true;

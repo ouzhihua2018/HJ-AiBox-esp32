@@ -35,7 +35,7 @@ private:
     // Private constructor
     WifiConfigurationAp();
     ~WifiConfigurationAp();
-
+    std::function<void()> wificonfigcallback_;
     std::mutex mutex_;
     DnsServer dns_server_;
     httpd_handle_t server_ = NULL;
@@ -48,7 +48,7 @@ private:
     bool is_connecting_ = false;
     esp_netif_t* ap_netif_ = nullptr;
     std::vector<wifi_ap_record_t> ap_records_;
-    std::function<void()> wificonfigcallback_;
+
     // 高级配置项
     std::string ota_url_;
     int8_t max_tx_power_;

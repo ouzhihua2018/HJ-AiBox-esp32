@@ -153,8 +153,9 @@ private:
         boot_button_.OnLongPress([this]() {
             auto& app = Application::GetInstance();
             ESP_LOGI(TAG,"BOOT TRIGGER");
-                SwitchNetworkType();
-            
+                //SwitchNetworkType();
+          
+            app.EmergencyWake();
         });
         
         boot_button_.OnMultipleClick([this](){

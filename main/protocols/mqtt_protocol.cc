@@ -113,6 +113,7 @@ bool MqttProtocol::SendText(const std::string& text) {
     if (publish_topic_.empty()) {
         return false;
     }
+    ESP_LOGW(TAG,"publish_topic:%s,text:%s",publish_topic_.c_str(),text.c_str());
     if (!mqtt_->Publish(publish_topic_, text)) {
         ESP_LOGE(TAG, "Failed to publish message: %s", text.c_str());
         SetError(Lang::Strings::SERVER_ERROR);
@@ -146,7 +147,17 @@ bool MqttProtocol::SendAudio(const AudioStreamPacket& packet) {
 
     return udp_->Send(encrypted) > 0;
 }
+bool MqttProtocol::SendEmptyPacket() {
+    std::lock_guard<std::mutex> lock(channel_mutex_);
+    if (udp_ == nullptr) {
+        return false;
+    }
 
+    std::string encrypted;
+    encrypted.resize(1024);
+    ESP_LOGI(TAG,"SendEmptyPacket size %d",encrypted.size());
+    return udp_->Send(encrypted) > 0;
+}
 void MqttProtocol::CloseAudioChannel() {
     {
         std::lock_guard<std::mutex> lock(channel_mutex_);
