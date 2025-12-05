@@ -153,9 +153,51 @@ bool MqttProtocol::SendEmptyPacket() {
         return false;
     }
 
+    // ========== 1. 构造模拟AudioStreamPacket（复用你的包结构） ==========
+    AudioStreamPacket mock_packet;
+    mock_packet.sample_rate = 16000;    // 模拟OPUS采样率（常用16k）
+    mock_packet.frame_duration = 20;    // 模拟OPUS帧时长（20ms是标准）
+    mock_packet.timestamp = 0;          // 初始时间戳（服务端不校验的话可设0）
+    // 模拟OPUS数据：填充固定字节（无需真实编码，长度建议100字节左右，避免MTU分片）
+    const size_t mock_opus_len = 100;
+    mock_packet.payload.resize(mock_opus_len, 0x7F);  // 0x7F是模拟音频静音数据
+
+    // ========== 2. 复用你的加密逻辑构造Nonce ==========
+    std::string nonce(aes_nonce_);  // 复用你的aes_nonce_（长度需和加密端一致，比如16字节）
+    // 填充payload_len（偏移2，2字节，大端序）
+    *(uint16_t*)&nonce[2] = htons(mock_packet.payload.size());
+    // 填充timestamp（偏移8，4字节，大端序）
+    *(uint32_t*)&nonce[8] = htonl(mock_packet.timestamp);
+    // 填充sequence（偏移12，4字节，大端序，复用local_sequence_自增）
+    *(uint32_t*)&nonce[12] = htonl(++local_sequence_);
+
+    // ========== 3. AES-CTR加密模拟OPUS数据 ==========
     std::string encrypted;
-    encrypted.resize(1024);
-    ESP_LOGI(TAG,"SendEmptyPacket size %d",encrypted.size());
+    // 加密后数据长度 = Nonce长度 + 模拟OPUS数据长度
+    encrypted.resize(aes_nonce_.size() + mock_packet.payload.size());
+    // 先拷贝Nonce到加密包开头
+    memcpy(encrypted.data(), nonce.data(), nonce.size());
+
+    size_t nc_off = 0;
+    uint8_t stream_block[16] = {0};
+    // 加密模拟OPUS数据（复用你的aes_ctx_加密上下文）
+    int ret = mbedtls_aes_crypt_ctr(
+        &aes_ctx_, 
+        mock_packet.payload.size(), 
+        &nc_off, 
+        (uint8_t*)nonce.c_str(), 
+        stream_block,
+        (uint8_t*)mock_packet.payload.data(),  // 模拟OPUS数据
+        (uint8_t*)&encrypted[nonce.size()]     // 加密后数据存放位置
+    );
+    if (ret != 0) {
+        ESP_LOGE(TAG, "Failed to encrypt mock audio data, ret:%d", ret);
+        return false;
+    }
+ 
+    // ========== 4. 发送加密后的模拟音频包 ==========
+    ESP_LOGI(TAG, "Send mock OPUS audio packet, total size:%zu (nonce:%zu, encrypted OPUS:%zu)",
+             encrypted.size(), aes_nonce_.size(), mock_packet.payload.size());
     return udp_->Send(encrypted) > 0;
 }
 void MqttProtocol::CloseAudioChannel() {

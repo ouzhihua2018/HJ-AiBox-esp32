@@ -605,14 +605,17 @@ void Application::Start() {
                             json_str += "\"state\":\"success\",";
                             json_str += "\"describe\":\"Successfully opened the audio channel\"";
                             json_str += "}";
-                            SetDeviceState(kDeviceStateListening);
-                            protocol_->SendText(json_str);
+                            protocol_->SendStartListening(listening_mode_);  //模拟对话流程
+                            protocol_->SendEmptyPacket();
+                            SetDeviceState(kDeviceStateSpeaking);
+                            protocol_->SendText(json_str); 
                             return;
                         }
                     } 
                     json_str += "\"state\":\"success\",";
                     json_str += "\"describe\":\"Successfully opened the audio channel\"";
                     json_str += "}";
+                    SetDeviceState(kDeviceStateSpeaking);
                     protocol_->SendText(json_str);
             });
         } else {
