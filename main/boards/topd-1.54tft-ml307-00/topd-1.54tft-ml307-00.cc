@@ -103,9 +103,18 @@ private:
         });
 
         boot_button_.OnLongPress([this]() {
-            SwitchNetworkType();
+            auto& app = Application::GetInstance();
+            ESP_LOGI(TAG,"BOOT TRIGGER");
+                //SwitchNetworkType();
+          
+            app.EmergencyWake();
         });
-
+        boot_button_.OnMultipleClick([this](){
+            if (GetNetworkType() == NetworkType::WIFI) {
+                auto& wifi_board = static_cast<WifiBoard&>(GetCurrentBoard());
+                wifi_board.ResetWifiConfiguration();
+            }
+        },3);
         volume_up_button_.OnClick([this]() {
             power_save_timer_->WakeUp();
             auto codec = GetAudioCodec();

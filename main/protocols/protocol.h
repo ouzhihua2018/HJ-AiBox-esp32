@@ -66,14 +66,16 @@ public:
     virtual void CloseAudioChannel() = 0;
     virtual bool IsAudioChannelOpened() const = 0;
     virtual bool SendAudio(const AudioStreamPacket& packet) = 0;
+    virtual bool SendSimulatedPacket()  = 0;
     virtual void SendWakeWordDetected(const std::string& wake_word);
+    virtual void SendEmergencyMessage(const int64_t & message,std::string mac);
     virtual void SendStartListening(ListeningMode mode);
     virtual void SendStopListening();
     virtual void SendAbortSpeaking(AbortReason reason);
     virtual void SendIotDescriptors(const std::string& descriptors);
     virtual void SendIotStates(const std::string& states);
     virtual void SendMcpMessage(const std::string& message);
-
+    virtual bool SendText(const std::string& text) = 0;
 protected:
     std::function<void(const cJSON* root)> on_incoming_json_;
     std::function<void(AudioStreamPacket&& packet)> on_incoming_audio_;
@@ -87,7 +89,7 @@ protected:
     std::string session_id_;
     std::chrono::time_point<std::chrono::steady_clock> last_incoming_time_;
 
-    virtual bool SendText(const std::string& text) = 0;
+    
     virtual void SetError(const std::string& message);
     virtual bool IsTimeout() const;
 };

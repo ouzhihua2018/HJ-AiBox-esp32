@@ -45,7 +45,14 @@ void Protocol::SendWakeWordDetected(const std::string& wake_word) {
                       "\",\"type\":\"listen\",\"state\":\"detect\",\"text\":\"" + wake_word + "\"}";
     SendText(json);
 }
-
+void Protocol::SendEmergencyMessage(const int64_t &timestamp, std::string mac)
+{   
+    char json[256];
+    snprintf(json,sizeof(json), "{\"session_id\":\"%s\","
+    "\"type\":\"emergency\",\"state\":\"call\",\"timestamp\":%lld,\"device_mac\":\"%s\"}",  session_id_.c_str(),timestamp,mac.c_str() );
+    
+    SendText(json);
+}
 void Protocol::SendStartListening(ListeningMode mode) {
     std::string message = "{\"session_id\":\"" + session_id_ + "\"";
     message += ",\"type\":\"listen\",\"state\":\"start\"";

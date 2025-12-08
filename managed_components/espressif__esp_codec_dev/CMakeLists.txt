@@ -74,7 +74,7 @@ if (CONFIG_CODEC_CJC8910_SUPPORT)
   list(APPEND COMPONENT_SRCS device/cjc8910/cjc8910.c)
 endif()
 
-idf_component_register(SRCS "${COMPONENT_SRCS}"
+idf_component_register(SRCS "esp_codec_dev_vol.c" "${COMPONENT_SRCS}"
                        INCLUDE_DIRS "${COMPONENT_ADD_INCLUDEDIRS}"
                        PRIV_INCLUDE_DIRS "${COMPONENT_PRIV_INCLUDEDIRS}"
                        REQUIRES driver
@@ -86,3 +86,4 @@ if (CONFIG_CODEC_ZL38063_SUPPORT)
     target_link_libraries(${COMPONENT_TARGET} INTERFACE firmware)
   endif()
 endif()
+

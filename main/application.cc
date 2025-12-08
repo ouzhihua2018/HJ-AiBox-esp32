@@ -641,6 +641,49 @@ void Application::Start() {
             } else {
                 ESP_LOGW(TAG, "Alert command requires status, message and emotion");
             }
+        } else if (strcmp(type->valuestring, "Hei") == 0) {
+            auto session_id = cJSON_GetObjectItem(root, "session_id");
+            auto state = cJSON_GetObjectItem(root, "state");
+            auto timestamp = cJSON_GetObjectItem(root, "timestamp");
+            if (cJSON_IsString(session_id) && cJSON_IsString(state) && cJSON_IsNumber(timestamp)) {
+                ESP_LOGW(TAG,"receive message: session_id %s",cJSON_GetStringValue(session_id));
+                 // 关键修复：提前提取「值」（拷贝到局部变量），而非捕获指针
+                std::string session_id_str = cJSON_GetStringValue(session_id); // 拷贝 session_id 字符串
+                int64_t timestamp_val = static_cast<int64_t>(timestamp->valuedouble); // 拷贝 timestamp 数值
+                Schedule([this,session_id_str,timestamp_val]() {
+                    std::string json_str = "{"
+                    "\"session_id\":\"" + session_id_str + "\","  // 复用输入的session_id
+                    "\"type\":\"Hei\"," + // 固定type为"Hei"
+                    "\"timestamp\":" + std::to_string(timestamp_val) + ",";
+                    
+                    if (!protocol_->IsAudioChannelOpened()) {
+                        SetDeviceState(kDeviceStateConnecting);
+                        if (!protocol_->OpenAudioChannel()) {
+                            json_str += "\"state\":\"error\",";
+                            json_str += "\"describe\":\"Failed to open audio channel\"";
+                            json_str += "}";
+                            protocol_->SendText(json_str);
+                            return;
+                        } else {
+                            json_str += "\"state\":\"success\",";
+                            json_str += "\"describe\":\"Successfully opened the audio channel\"";
+                            json_str += "}";
+                            protocol_->SendStartListening(listening_mode_);  //模拟对话流程
+                            protocol_->SendSimulatedPacket();
+                            SetDeviceState(kDeviceStateSpeaking);
+                            protocol_->SendText(json_str); 
+                            return;
+                        }
+                    } 
+                    json_str += "\"state\":\"success\",";
+                    json_str += "\"describe\":\"Successfully opened the audio channel\"";
+                    json_str += "}";
+                    SetDeviceState(kDeviceStateSpeaking);
+                    protocol_->SendText(json_str);
+            });
+        } else {
+                ESP_LOGW(TAG, "Cjson format error");
+                }
         } else {
             ESP_LOGW(TAG, "Unknown message type: %s", type->valuestring);
         }
@@ -1177,6 +1220,18 @@ void Application::RefreshToNormalInterface() {
 
 
 
+void Application::EmergencyWake()
+{   
+    if(ota_.HasServerTime()){ //服务器同步过时间
+        struct timeval tv;
+        gettimeofday(&tv, NULL);
+        int64_t beijing_timestamp_ms  =(int64_t) tv.tv_sec * 1000 + (tv.tv_usec + 500) / 1000;
+        // 2. 东八区转 UTC：减去 8 小时（8×3600×1000 = 28800000 毫秒）
+        int64_t utc_timestamp_ms = beijing_timestamp_ms - 8 * 3600 * 1000;
+        std::string mac_address = SystemInfo::GetMacAddress();
+        protocol_->SendEmergencyMessage(utc_timestamp_ms,mac_address);
+    }
+}
 
 
 

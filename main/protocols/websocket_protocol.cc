@@ -59,7 +59,59 @@ bool WebsocketProtocol::SendAudio(const AudioStreamPacket& packet) {
         return websocket_->Send(packet.payload.data(), packet.payload.size(), true);
     }
 }
+bool WebsocketProtocol::SendSimulatedPacket()
+{
+    if (websocket_ == nullptr) {
+        return false;
+    }
 
+    // ========== 1. 构造模拟AudioStreamPacket（仅填充payload） ==========
+    AudioStreamPacket mock_packet;
+    mock_packet.timestamp = static_cast<uint32_t>(esp_timer_get_time() / 1000); // 真实毫秒时间戳
+    const size_t mock_opus_len = 100; // 模拟OPUS数据长度（100字节，避免过小被过滤）
+    mock_packet.payload.resize(mock_opus_len, 0x7F); // 填充0x7F（模拟OPUS静音数据）
+
+    // ========== 2. 按version_分支封装协议头（和真实SendAudio一致） ==========
+    std::string serialized;
+    if (version_ == 2) {
+        // 版本2：封装BinaryProtocol2头 + 模拟payload
+        serialized.resize(sizeof(BinaryProtocol2) + mock_packet.payload.size());
+        auto bp2 = reinterpret_cast<BinaryProtocol2*>(serialized.data());
+        bp2->version = htons(version_);    // 网络字节序（大端）
+        bp2->type = 0;                     // 音频类型（和真实包一致）
+        bp2->reserved = 0;                 // 保留字段默认0
+        bp2->timestamp = htonl(mock_packet.timestamp); // 时间戳转网络序
+        bp2->payload_size = htonl(mock_packet.payload.size()); // payload长度转网络序
+        // 拷贝模拟OPUS数据到payload
+        memcpy(bp2->payload, mock_packet.payload.data(), mock_packet.payload.size());
+
+    } else if (version_ == 3) {
+        // 版本3：封装BinaryProtocol3头 + 模拟payload
+        serialized.resize(sizeof(BinaryProtocol3) + mock_packet.payload.size());
+        auto bp3 = reinterpret_cast<BinaryProtocol3*>(serialized.data());
+        bp3->type = 0;                     // 音频类型（和真实包一致）
+        bp3->reserved = 0;                 // 保留字段默认0
+        bp3->payload_size = htons(mock_packet.payload.size()); // payload长度转网络序（v3是2字节）
+        // 拷贝模拟OPUS数据到payload
+        memcpy(bp3->payload, mock_packet.payload.data(), mock_packet.payload.size());
+
+    } else {
+        // 默认版本：直接发送模拟payload（无协议头）
+        serialized.assign(reinterpret_cast<const char*>(mock_packet.payload.data()), mock_packet.payload.size());
+    }
+
+    // ========== 3. 发送Websocket二进制帧（和真实逻辑一致） ==========
+    ESP_LOGI(TAG, "Send mock audio via Websocket (version:%d), total size:%zu (header:%zu, payload:%zu)",
+             version_, serialized.size(), 
+             (version_ == 2 ? sizeof(BinaryProtocol2) : (version_ == 3 ? sizeof(BinaryProtocol3) : 0)),
+             mock_opus_len);
+
+    bool send_ret = websocket_->Send(serialized.data(), serialized.size(), true);
+    if (!send_ret) {
+        ESP_LOGE(TAG, "Failed to send mock audio packet via Websocket");
+    }
+    return send_ret;
+}
 bool WebsocketProtocol::SendText(const std::string& text) {
     if (websocket_ == nullptr) {
         return false;

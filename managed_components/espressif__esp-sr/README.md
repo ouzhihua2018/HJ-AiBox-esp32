@@ -41,10 +41,11 @@ The following wake words are supported in esp-sr:
 |wake words       |             WakeNet9s           |  WakeNet9              | 
 |:--------------- | :------------------------------:| :---------------------:| 
 |Hi,乐鑫           |  wn9s_hilexin                   | wn9_hilexin            | 
-|Hi,ESP           |  wn9s_hiesp                     | wn9_hiesp              | 
-|你好小智          |  wn9s_nihaoxiaozhi               | wn9_nihaoxiaozhi_tts   |
-|Hi,Jason         |   wn9s_hijason_tts2               | wn9_hijason_tts2       |
-|小爱同学          |                                  | wn9_xiaoaitongxue      | 
+|Hi,ESP           |  wn9s_hiesp                      | wn9_hiesp              | 
+|你好小智          |  wn9s_nihaoxiaozhi              | wn9_nihaoxiaozhi_tts   |
+|Hi,Jason         |   wn9s_hijason_tts2              | wn9_hijason_tts2       |
+|你好喵伴          |                                 | wn9_nihaomiaoban_tts2   |
+|小爱同学          |                                 | wn9_xiaoaitongxue      | 
 |Hi,M Five        |                                  | wn9_himfive            | 
 |Alexa            |                                  | wn9_alexa              | 
 |Jarvis           |                                  | wn9_jarvis_tts         | 
@@ -57,6 +58,9 @@ The following wake words are supported in esp-sr:
 |Hey,Wand         |                                  | wn9_heywanda_tts       |
 |Astrolabe        |                                  | wn9_astrolabe_tts      |
 |Hey,Ily          |                                  | wn9_heyily_tts2        |
+|Hi,Jolly         |                                  | wn9_hijolly_tts2        |
+|Hi,Fairy         |                                  | wn9_hifairy_tts2        |
+|Blue Chip        |                                  | wn9_bluechip_tts2        |
 |Hi,Wall E/Hi,瓦力|                                  | wn9_hiwalle_tts2       |
 |你好小鑫         |                                  | wn9_nihaoxiaoxin_tts   |
 |小美同学         |                                  | wn9_xiaomeitongxue_tts |
@@ -78,6 +82,9 @@ The following wake words are supported in esp-sr:
 |小特小特         |                                  | wn9_xiaotexiaote_tts2|
 |你好小益         |                                  | wn9_nihaoxiaoyi_tts2|
 |你好百应         |                                  | wn9_nihaobaiying_tts2|
+|小鹿小鹿         |                                  | wn9_xiaoluxiaolu_tts2|
+|你好东东         |                                  | wn9_nihaodongdong_tts2|
+|你好小安         |                                  | wn9_nihaoxiaoan_tts2|
 
 *NOTE:* `_tts` suffix means this WakeNet model is trained by TTS samples. `_tts2` suffix means this WakeNet model is trained by TTS Pipeline V2.
 

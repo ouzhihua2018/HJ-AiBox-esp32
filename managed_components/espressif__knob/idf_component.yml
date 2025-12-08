@@ -6,7 +6,7 @@ documentation: https://docs.espressif.com/projects/esp-iot-solution/en/latest/in
 issues: https://github.com/espressif/esp-iot-solution/issues
 repository: git://github.com/espressif/esp-iot-solution.git
 repository_info:
-  commit_sha: 17c072bdd192f5bdbe26976b50ae410ccdde1ff9
+  commit_sha: 63e9a518c823a9912bb90610891407496abb4e8c
   path: components/knob
 url: https://github.com/espressif/esp-iot-solution/tree/master/components/knob
-version: 1.0.0
+version: 1.0.1
