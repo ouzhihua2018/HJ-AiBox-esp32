@@ -28,7 +28,7 @@ void Ml307Board::StartNetwork() {
     display->SetStatus(Lang::Strings::DETECTING_MODULE);
     ESP_LOGW(TAG,"ML307BOARD");
     auto& application = Application::GetInstance();
-    application.PlaySound(Lang::Sounds::P3_4G);
+    //application.PlaySound(Lang::Sounds::P3_4G);
     modem_.SetDebug(false);
     modem_.SetBaudRate(921600);
 

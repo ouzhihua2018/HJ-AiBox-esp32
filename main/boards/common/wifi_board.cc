@@ -43,7 +43,7 @@ void WifiBoard::EnterWifiConfigMode() {
 
     auto& wifi_ap = WifiConfigurationAp::GetInstance();
     wifi_ap.SetWifiConfigCallback([& application](){
-        application.PlaySound(Lang::Sounds::P3_WIFICONFIGOK);
+        //application.PlaySound(Lang::Sounds::P3_WIFICONFIGOK);
     });
     wifi_ap.SetLanguage(Lang::CODE);
     wifi_ap.SetSsidPrefix("Dingle");
@@ -76,7 +76,7 @@ void WifiBoard::StartNetwork() {
         return;
     }
     Application& app = Application::GetInstance();
-    app.PlaySound(Lang::Sounds::P3_WIFI);
+    //app.PlaySound(Lang::Sounds::P3_WIFI);
     // If no WiFi SSID is configured, enter WiFi configuration mode
     auto& ssid_manager = SsidManager::GetInstance();
     auto ssid_list = ssid_manager.GetSsidList();
