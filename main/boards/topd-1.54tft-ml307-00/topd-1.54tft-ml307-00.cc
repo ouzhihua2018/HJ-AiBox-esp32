@@ -92,13 +92,6 @@ private:
         boot_button_.OnClick([this]() {
             power_save_timer_->WakeUp();
             auto& app = Application::GetInstance();
-            if (GetNetworkType() == NetworkType::WIFI) {
-                if (app.GetDeviceState() == kDeviceStateStarting && !WifiStation::GetInstance().IsConnected()) {
-                    // cast to WifiBoard
-                    auto& wifi_board = static_cast<WifiBoard&>(GetCurrentBoard());
-                    wifi_board.ResetWifiConfiguration();
-                }
-            }
             app.ToggleChatState();
         });
 
@@ -118,9 +111,13 @@ private:
         volume_up_button_.OnClick([this]() {
             power_save_timer_->WakeUp();
             auto codec = GetAudioCodec();
+            auto& app = Application::GetInstance();
             auto volume = codec->output_volume() + 10;
             if (volume > 100) {
+                app.PlaySound(Lang::Sounds::P3_LIMIT);
                 volume = 100;
+            }else{
+                app.PlaySound(Lang::Sounds::P3_PLUS);
             }
             codec->SetOutputVolume(volume);
             GetDisplay()->ShowNotification(Lang::Strings::VOLUME + std::to_string(volume/10));
@@ -135,9 +132,13 @@ private:
         volume_down_button_.OnClick([this]() {
             power_save_timer_->WakeUp();
             auto codec = GetAudioCodec();
+            auto& app = Application::GetInstance();
             auto volume = codec->output_volume() - 10;
             if (volume < 0) {
+                app.PlaySound(Lang::Sounds::P3_LIMIT);
                 volume = 0;
+            } else{
+                app.PlaySound(Lang::Sounds::P3_MINUS);
             }
             codec->SetOutputVolume(volume);
             GetDisplay()->ShowNotification(Lang::Strings::VOLUME + std::to_string(volume/10));

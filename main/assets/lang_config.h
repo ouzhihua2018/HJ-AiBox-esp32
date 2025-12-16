@@ -214,5 +214,26 @@ namespace Lang {
         static_cast<const char*>(p3_wificonfig_start),
         static_cast<size_t>(p3_wificonfig_end - p3_wificonfig_start)
         };
+
+        extern const char p3_limit_start[] asm("_binary_limit_p3_start");
+        extern const char p3_limit_end[] asm("_binary_limit_p3_end");
+        static const std::string_view P3_LIMIT {
+        static_cast<const char*>(p3_limit_start),
+        static_cast<size_t>(p3_limit_end - p3_limit_start)
+        };
+
+        extern const char p3_minus_start[] asm("_binary_minus_p3_start");
+        extern const char p3_minus_end[] asm("_binary_minus_p3_end");
+        static const std::string_view P3_MINUS {
+        static_cast<const char*>(p3_minus_start),
+        static_cast<size_t>(p3_minus_end - p3_minus_start)
+        };
+
+        extern const char p3_plus_start[] asm("_binary_plus_p3_start");
+        extern const char p3_plus_end[] asm("_binary_plus_p3_end");
+        static const std::string_view P3_PLUS {
+        static_cast<const char*>(p3_plus_start),
+        static_cast<size_t>(p3_plus_end - p3_plus_start)
+        };
     }
 }
