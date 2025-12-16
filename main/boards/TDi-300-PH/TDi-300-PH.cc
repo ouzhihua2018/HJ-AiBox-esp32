@@ -60,12 +60,12 @@ static const gc9a01_lcd_init_cmd_t gc9107_lcd_init_cmds[] = {
 };
 #endif
  
-#define TAG "HUIJIN-XIAOZHIAI"
+#define TAG "TDi-300-PH"
 
 LV_FONT_DECLARE(font_puhui_14_1);
 LV_FONT_DECLARE(font_awesome_16_4);
 
-class HjXiaozhiAi : public DualNetworkBoard {
+class TDi_300_PH : public DualNetworkBoard {
 private:
  
    
@@ -217,7 +217,7 @@ private:
     }
 
 public:
-    HjXiaozhiAi() : DualNetworkBoard(ML307_TX_PIN, ML307_RX_PIN, 4096),
+        TDi_300_PH() : DualNetworkBoard(ML307_TX_PIN, ML307_RX_PIN, 4096),
         boot_button_(BOOT_BUTTON_GPIO) ,
         volume_up_button_(VOLUME_UP_BUTTON_GPIO),
         volume_down_button_(VOLUME_DOWN_BUTTON_GPIO){
@@ -229,7 +229,7 @@ public:
             GetBacklight()->RestoreBrightness();
         }
         
-    }
+    }   
 
 
     virtual Led* GetLed() override {
@@ -264,4 +264,4 @@ public:
     }
 };
 
-DECLARE_BOARD(HjXiaozhiAi);
+DECLARE_BOARD(TDi_300_PH);

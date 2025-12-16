@@ -23,7 +23,7 @@ public:
     void StartSmartConfig();
     bool ConnectToWifi(const std::string &ssid, const std::string &password);
     void Save(const std::string &ssid, const std::string &password);
-    void SetWifiConfigCallback(std::function<void()> wificonfigcallback);
+
     std::string GetSsid();
     std::string GetWebServerUrl();
 
@@ -35,7 +35,7 @@ private:
     // Private constructor
     WifiConfigurationAp();
     ~WifiConfigurationAp();
-    std::function<void()> wificonfigcallback_;
+
     std::mutex mutex_;
     DnsServer dns_server_;
     httpd_handle_t server_ = NULL;

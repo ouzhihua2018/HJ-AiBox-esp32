@@ -675,10 +675,7 @@ void WifiConfigurationAp::Save(const std::string &ssid, const std::string &passw
     ESP_LOGI(TAG, "Save SSID %s %d", ssid.c_str(), ssid.length());
     SsidManager::GetInstance().AddSsid(ssid, password);
 }
-void WifiConfigurationAp::SetWifiConfigCallback(std::function<void()> wificonfigcallback)
-{
-    wificonfigcallback_ = wificonfigcallback ; 
-}
+
 void WifiConfigurationAp::WifiEventHandler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data)
 {
     WifiConfigurationAp* self = static_cast<WifiConfigurationAp*>(arg);

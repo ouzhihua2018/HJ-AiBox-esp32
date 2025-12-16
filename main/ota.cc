@@ -88,6 +88,7 @@ bool Ota::CheckVersion() {
     auto http = std::unique_ptr<Http>(SetupHttp());
 
     std::string data = board.GetJson();
+    ESP_LOGI(TAG,"OTA HTTP SEND %s",data.c_str());
     std::string method = data.length() > 0 ? "POST" : "GET";
     http->SetContent(std::move(data));
 

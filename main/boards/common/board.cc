@@ -42,7 +42,7 @@ std::string Board::GenerateUuid() {
         uuid[12], uuid[13], uuid[14], uuid[15]);
     
     return std::string(uuid_str);
-}
+} 
 
 bool Board::GetBatteryLevel(int &level, bool& charging, bool& discharging) {
     return false;

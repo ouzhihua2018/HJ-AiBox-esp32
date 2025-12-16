@@ -42,9 +42,9 @@ void WifiBoard::EnterWifiConfigMode() {
     Display* display = Board::GetDisplay();
 
     auto& wifi_ap = WifiConfigurationAp::GetInstance();
-    wifi_ap.SetWifiConfigCallback([& application](){
-        //application.PlaySound(Lang::Sounds::P3_WIFICONFIGOK);
-    });
+    // wifi_ap.SetWifiConfigCallback([& application](){
+    //     //application.PlaySound(Lang::Sounds::P3_WIFICONFIGOK);
+    // });
     wifi_ap.SetLanguage(Lang::CODE);
     wifi_ap.SetSsidPrefix("Dingle");
     wifi_ap.Start();
