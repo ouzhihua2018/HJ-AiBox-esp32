@@ -256,9 +256,8 @@ bool Ml307AtModem::ParseResponse() {
         rx_buffer_.erase(0, 2);
         return true;
     }
-   
     if (debug_) {
-        ESP_LOGE(TAG, "<< %.64s (%u bytes)", rx_buffer_.substr(0, end_pos).c_str(), end_pos);
+        ESP_LOGI(TAG, "<< %.64s (%u bytes)", rx_buffer_.substr(0, end_pos).c_str(), end_pos);
         // print last 64 bytes before end_pos if available
         // if (end_pos > 64) {
         //     ESP_LOGI(TAG, "<< LAST: %.64s", rx_buffer_.c_str() + end_pos - 64);

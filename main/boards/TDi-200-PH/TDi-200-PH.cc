@@ -22,13 +22,13 @@
 #include <freertos/task.h> //新增
 #include <sys/time.h>   //新增
 
-#define TAG "TOPD_1_54TFT_ML307_00"
+#define TAG "TDi-200-PH"
 
 LV_FONT_DECLARE(font_puhui_20_4);
 LV_FONT_DECLARE(font_awesome_20_4);
 
 
-class TOPD_1_54TFT_ML307_00 : public DualNetworkBoard {
+class TDi_200_PH : public DualNetworkBoard {
 private:
     Button boot_button_;
     Button volume_up_button_;
@@ -206,7 +206,7 @@ private:
     }
 
 public:
-    TOPD_1_54TFT_ML307_00
+    TDi_200_PH
 () :
         DualNetworkBoard(ML307_TX_PIN, ML307_RX_PIN, 4096),
         boot_button_(BOOT_BUTTON_GPIO),
@@ -270,4 +270,4 @@ public:
     
 };
 
-DECLARE_BOARD(TOPD_1_54TFT_ML307_00);
+DECLARE_BOARD(TDi_200_PH);

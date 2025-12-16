@@ -39,7 +39,7 @@ file(GLOB EMOJI_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/emoji/src/*.c)
 list(APPEND SOURCES ${EMOJI_SOURCES})
 
 
-set(BOARD_TYPE "topd-1.54tft-ml307-00")
+set(BOARD_TYPE "TDi-200-PH")
 
 file(GLOB BOARD_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/boards/${BOARD_TYPE}/*.cc
@@ -96,7 +96,7 @@ idf_component_register(SRCS ${SOURCES}
 if(NOT BOARD_NAME)
     set(BOARD_NAME ${BOARD_TYPE})
 endif()
-target_compile_definitions(${COMPONENT_LIB}
+target_compile_definitions(${COMPONENT_LIB}   #直接将变量编译入组件库
                     PRIVATE BOARD_TYPE=\"${BOARD_TYPE}\" BOARD_NAME=\"${BOARD_NAME}\"
                     )
 
