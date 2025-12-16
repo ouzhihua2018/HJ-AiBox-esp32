@@ -4,11 +4,11 @@
 # CMakeLists in this exact order for cmake to work correctly
 cmake_minimum_required(VERSION 3.16) # 全局变量版本
 
-set(PROJECT_VER "1.7.3")
+set(PROJECT_VER "1.0.0")
 
 # Add this line to disable the specific warning
 add_compile_options(-Wno-missing-field-initializers)
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
-project(xiaozhi) # 生成bin文件的名称，项目名称，最关键的内容
+project(TDi-200-PH) # 生成bin文件的名称，项目名称，最关键的内容
 
