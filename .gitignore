@@ -1,5 +1,4 @@
 tmp/
-components/
 managed_components/*
 !managed_components/78__esp-wifi-connect
 !managed_components/78__esp-wifi-connect/**/*
