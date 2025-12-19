@@ -23,7 +23,7 @@ public:
     void StartSmartConfig();
     bool ConnectToWifi(const std::string &ssid, const std::string &password);
     void Save(const std::string &ssid, const std::string &password);
-    void SetWifiConfigCallback(std::function<void()> wificonfigcallback);
+
     std::string GetSsid();
     std::string GetWebServerUrl();
 
@@ -48,7 +48,7 @@ private:
     bool is_connecting_ = false;
     esp_netif_t* ap_netif_ = nullptr;
     std::vector<wifi_ap_record_t> ap_records_;
-    std::function<void()> wificonfigcallback_;
+
     // 高级配置项
     std::string ota_url_;
     int8_t max_tx_power_;

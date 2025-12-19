@@ -20,7 +20,7 @@ public:
     void OnWakeWordDetected(std::function<void(std::string wake_word)> callback) {callback_=callback;} ;
     void StartDetection();
     void Feed(std::vector<int16_t>& data) ;
-    void StartAgain();
+
     void Stop();
     bool IsRunning();
 private:
