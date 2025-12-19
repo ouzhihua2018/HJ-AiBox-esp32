@@ -151,13 +151,13 @@ private:
         });
 
           // 初始化用户按钮(IO17)，模拟唤醒词识别
-        user_button_.OnClick([this]() {
-            auto& app = Application::GetInstance();
-            auto state = app.GetDeviceState();
-            if (state == kDeviceStateIdle || state == kDeviceStateSpeaking) {
-                app.WakeWordInvoke("你好啊");
-            }
-        });
+        // user_button_.OnClick([this]() {
+        //     auto& app = Application::GetInstance();
+        //     auto state = app.GetDeviceState();
+        //     if (state == kDeviceStateIdle || state == kDeviceStateSpeaking) {
+        //         app.WakeWordInvoke("你好啊");
+        //     }
+        // });
 
       
     }

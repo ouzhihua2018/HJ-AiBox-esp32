@@ -23,7 +23,7 @@
 #include "background_task.h"
 #include "audio_processor.h"
 //#include "wake_word.h"
-
+#include "micro_wake_word_detect.h"
 #define SCHEDULE_EVENT (1 << 0)
 #define SEND_AUDIO_EVENT (1 << 1)
 #define CHECK_NEW_VERSION_DONE_EVENT (1 << 2)
@@ -86,6 +86,7 @@ private:
     ~Application();
     lv_image_dsc_t qrcode_img ;
     //std::unique_ptr<WakeWord> wake_word_;
+    std::unique_ptr<MicroWakeWordDetect> micro_wake_word_;
     std::unique_ptr<AudioProcessor> audio_processor_;
     Ota ota_;
     std::mutex mutex_;
