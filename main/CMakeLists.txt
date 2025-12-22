@@ -41,26 +41,15 @@ file(GLOB BOARD_SOURCES
 )
 list(APPEND SOURCES ${BOARD_SOURCES})
 
-if(CONFIG_HJ_ASR_LEVEL)
-    list(APPEND SOURCES "asr_pro_level.cc")
-elseif(CONFIG_HJ_ASR_UART)
-    list(APPEND SOURCES "asr_pro_uart.cc")
-endif()
-
 
 if(CONFIG_USE_AUDIO_PROCESSOR)
     list(APPEND SOURCES "audio_processing/afe_audio_processor.cc")
 else()
     list(APPEND SOURCES "audio_processing/no_audio_processor.cc")
 endif()
-if(CONFIG_USE_AFE_WAKE_WORD)
-    list(APPEND SOURCES "audio_processing/afe_wake_word.cc")
-elseif(CONFIG_USE_ESP_WAKE_WORD)
-    list(APPEND SOURCES "audio_processing/esp_wake_word.cc")
-else()
-    list(APPEND SOURCES "audio_processing/no_wake_word.cc")
-endif()
 
+list(APPEND SOURCES "audio_processing/micro_wake_word_detect.cc")
+list(APPEND SOURCES "audio_processing/model.cc")
 
 # 根据Kconfig选择语言目录
 if(CONFIG_LANGUAGE_ZH_CN)
@@ -91,6 +80,11 @@ idf_component_register(SRCS ${SOURCES}
                     EMBED_FILES ${LANG_SOUNDS} ${COMMON_SOUNDS}
                     INCLUDE_DIRS ${INCLUDE_DIRS}
                     WHOLE_ARCHIVE
+                    REQUIRES micro_wake_word 
+                             esp_app_format 
+                             app_update
+                             spi_flash
+                             efuse
                     )
 
 # 使用 target_compile_definitions 来定义 BOARD_TYPE, BOARD_NAME

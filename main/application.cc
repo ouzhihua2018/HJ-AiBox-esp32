@@ -26,13 +26,6 @@
 #include "no_audio_processor.h"
 #endif
 
-#if CONFIG_USE_AFE_WAKE_WORD
-#include "afe_wake_word.h"
-#elif CONFIG_USE_ESP_WAKE_WORD
-#include "esp_wake_word.h"
-#else
-#include "no_wake_word.h"
-#endif
 
 
 
@@ -78,15 +71,9 @@ Application::Application() {
     audio_processor_ = std::make_unique<NoAudioProcessor>();
 #endif
 
-#if CONFIG_USE_AFE_WAKE_WORD
-    wake_word_ = std::make_unique<AfeWakeWord>();
-#elif CONFIG_USE_ESP_WAKE_WORD
-    wake_word_ = std::make_unique<EspWakeWord>();
-#else
-    wake_word_ = std::make_unique<NoWakeWord>();
-#endif
+   micro_wake_word_ = std::make_unique<MicroWakeWordDetect>();
 
-   asr_pro_ = std::make_unique<asr_pro>();
+   
     esp_timer_create_args_t clock_timer_args = {
         .callback = [](void* arg) {
             Application* app = (Application*)arg;
@@ -158,7 +145,8 @@ void Application::CheckNewVersion() {
 
             auto& board = Board::GetInstance();
             board.SetPowerSaveMode(false);
-            wake_word_->StopDetection();
+           
+            micro_wake_word_->Stop();
             // 预先关闭音频输出，避免升级过程有音频操作
             auto codec = board.GetAudioCodec();
             codec->EnableInput(false);
@@ -683,77 +671,22 @@ void Application::Start() {
         }
     });
 
-    wake_word_->Initialize(codec);
-    wake_word_->OnWakeWordDetected([this](const std::string& wake_word) {
-       [this, &wake_word]() {
-            if (!protocol_) {
-                return;
-            }
-
-            if (device_state_ == kDeviceStateIdle) {
-                wake_word_->EncodeWakeWordData();
-
-                if (!protocol_->IsAudioChannelOpened()) {
-                    SetDeviceState(kDeviceStateConnecting);
-                    if (!protocol_->OpenAudioChannel()) {
-                        wake_word_->StartDetection();
-                        return;
-                    }
-                }
-
-                ESP_LOGI(TAG, "Wake word detected: %s", wake_word.c_str());
-#if CONFIG_USE_AFE_WAKE_WORD
-                AudioStreamPacket packet;
-                // Encode and send the wake word data to the server
-                while (wake_word_->GetWakeWordOpus(packet.payload)) {
-                    protocol_->SendAudio(packet);
-                }
-                // Set the chat state to wake word detected
-                protocol_->SendWakeWordDetected(wake_word);
-#else
-                // Play the pop up sound to indicate the wake word is detected
-                // And wait 60ms to make sure the queue has been processed by audio task
-                ResetDecoder();
-                PlaySound(Lang::Sounds::P3_POPUP);
-                vTaskDelay(pdMS_TO_TICKS(60));
-#endif
-                SetListeningMode(aec_mode_ == kAecOff ? kListeningModeAutoStop : kListeningModeRealtime);
-            } else if (device_state_ == kDeviceStateSpeaking) {
-                AbortSpeaking(kAbortReasonWakeWordDetected);
-            } else if (device_state_ == kDeviceStateActivating) {
-                SetDeviceState(kDeviceStateIdle);
-            }
-        };});
-    
-    wake_word_->StartDetection();
-
-    asr_pro_->set_wake_callback([this](const std::string & wake_word){ 
-        this-> wake_word_->StopDetection();
-        Schedule([this,&wake_word](){
+    micro_wake_word_->OnWakeWordDetected([this](const std::string& wake_word){
+        Schedule([this, &wake_word]() {
             if (!protocol_) {
                 return;
             }
             if (device_state_ == kDeviceStateIdle) {
-
                 if (!protocol_->IsAudioChannelOpened()) {
                     SetDeviceState(kDeviceStateConnecting);
                     if (!protocol_->OpenAudioChannel()) {
-                        wake_word_->StartDetection();
+                        micro_wake_word_->StartDetection();
                         return;
                     }
                 }
-
-                ESP_LOGI(TAG, "Asr wake word detected: %s", wake_word.c_str());
-#if CONFIG_USE_AFE_WAKE_WORD
-                // Set the chat state to wake word detected
-                protocol_->SendWakeWordDetected(wake_word);
-#else
-                // Play the pop up sound to indicate the wake word is detected
-                // And wait 60ms to make sure the queue has been processed by audio task
                 ResetDecoder();
                 PlaySound(Lang::Sounds::P3_POPUP);
                 vTaskDelay(pdMS_TO_TICKS(60));
-#endif
                 SetListeningMode(aec_mode_ == kAecOff ? kListeningModeAutoStop : kListeningModeRealtime);
             } else if (device_state_ == kDeviceStateSpeaking) {
                 AbortSpeaking(kAbortReasonWakeWordDetected);
@@ -761,8 +694,10 @@ void Application::Start() {
                 SetDeviceState(kDeviceStateIdle);
             }
         });
-
-    });
+    }
+    );
+    micro_wake_word_->InitializeWakeWordDetect();
+    micro_wake_word_->StartDetection();
     
     // Wait for the new version check to finish
     xEventGroupWaitBits(event_group_, CHECK_NEW_VERSION_DONE_EVENT, pdTRUE, pdFALSE, portMAX_DELAY);
@@ -929,15 +864,12 @@ void Application::OnAudioOutput() {
 }
 
 void Application::OnAudioInput() {
-    if (wake_word_->IsDetectionRunning()) {
+    if(micro_wake_word_->IsRunning()){
         std::vector<int16_t> data;
-        int samples = wake_word_->GetFeedSize();
-        if (samples > 0) {
-            if (ReadAudio(data, 16000, samples)) {
-                wake_word_->Feed(data);
-                return;
-            }
-        }
+        if (ReadAudio(data, 16000,256)) {   //16ms一帧 
+            micro_wake_word_->Feed(data);
+            return;
+        }   
     }
     if (audio_processor_->IsRunning()) {
         std::vector<int16_t> data;
@@ -1036,7 +968,7 @@ void Application::SetDeviceState(DeviceState state) {
             display->SetStatus(Lang::Strings::STANDBY);
             display->SetEmotion("neutral");
             audio_processor_->Stop();
-            wake_word_->StartDetection();
+            micro_wake_word_->StartDetection();
             break;
         case kDeviceStateConnecting:
             display->SetStatus(Lang::Strings::CONNECTING);
@@ -1064,7 +996,7 @@ void Application::SetDeviceState(DeviceState state) {
                 }
                 opus_encoder_->ResetState();
                 audio_processor_->Start();
-                wake_word_->StopDetection();
+                micro_wake_word_->Stop();
             }
             break;
         case kDeviceStateSpeaking:
@@ -1073,11 +1005,7 @@ void Application::SetDeviceState(DeviceState state) {
             if (listening_mode_ != kListeningModeRealtime) {
                 audio_processor_->Stop();
                 // Only AFE wake word can be detected in speaking mode
-#if CONFIG_USE_AFE_WAKE_WORD
-                wake_word_->StartDetection();
-#else
-                wake_word_->StopDetection();
-#endif
+                micro_wake_word_->StartDetection();
             }
             ResetDecoder();
             break;
