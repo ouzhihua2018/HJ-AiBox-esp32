@@ -61,7 +61,7 @@ public:
     // 删除拷贝构造函数和赋值运算符
     Application(const Application&) = delete;
     Application& operator=(const Application&) = delete;
-
+    void ResetDecoder();
     void Start();
     DeviceState GetDeviceState() const { return device_state_; }
     bool IsVoiceDetected() const { return voice_detected_; }
@@ -97,6 +97,7 @@ private:
     bool remind_mark_ = false ;
     EventGroupHandle_t event_group_ = nullptr;
     esp_timer_handle_t clock_timer_handle_ = nullptr;
+    esp_timer_handle_t microwakeword_timer_handle_ = nullptr;
     volatile DeviceState device_state_ = kDeviceStateUnknown;
     ListeningMode listening_mode_ = kListeningModeAutoStop;
     AecMode aec_mode_ = kAecOff;
@@ -130,7 +131,7 @@ private:
     void OnAudioInput();
     void OnAudioOutput();
     bool ReadAudio(std::vector<int16_t>& data, int sample_rate, int samples);
-    void ResetDecoder();
+
     void SetDecodeSampleRate(int sample_rate, int frame_duration);
     void CheckNewVersion();
     void ShowActivationCode();

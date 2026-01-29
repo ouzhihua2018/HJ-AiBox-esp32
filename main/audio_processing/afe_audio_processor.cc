@@ -21,7 +21,7 @@ void AfeAudioProcessor::Initialize(AudioCodec* codec) {
     for (int i = 0; i < ref_num; i++) {
         input_format.push_back('R');
     }
-
+    // M R
     srmodel_list_t *models = esp_srmodel_init("model");
     char* ns_model_name = esp_srmodel_filter(models, ESP_NSNET_PREFIX, NULL);
 

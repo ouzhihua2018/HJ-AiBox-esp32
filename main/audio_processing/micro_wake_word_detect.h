@@ -12,6 +12,10 @@
 #include "esphome/components/micro_wake_word/micro_wake_word.h"
 #include "model.h"
 #include "esp_timer.h"
+#pragma once
+#include "esphome/components/micro_wake_word/micro_wake_word.h"
+#include "freertos/semphr.h"
+
 class MicroWakeWordDetect{
 public:
     MicroWakeWordDetect();
@@ -20,7 +24,7 @@ public:
     void OnWakeWordDetected(std::function<void(std::string wake_word)> callback) {callback_=callback;} ;
     void StartDetection();
     void Feed(std::vector<int16_t>& data) ;
-
+    size_t FreeSize();
     void Stop();
     bool IsRunning();
 private:
@@ -28,5 +32,6 @@ private:
     esphome::micro_wake_word::MicroWakeWord wakeWord_ ;
     bool Detected_;
     esp_timer_handle_t micro_timer_handle_;
+    //SemaphoreHandle_t mutex_;  // 添加互斥锁保护共享资源
 };
 #endif

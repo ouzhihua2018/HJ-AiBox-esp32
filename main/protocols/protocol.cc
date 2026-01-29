@@ -48,10 +48,11 @@ void Protocol::SendWakeWordDetected(const std::string& wake_word) {
 
 void Protocol::SendEmergencyMessage(const int64_t &timestamp, std::string mac)
 {   
-    char json[256];
+    char json[512];
+    // snprintf(json,sizeof(json), "{\"session_id\":\"%s\","
+    // "\"type\":\"emergency\",\"state\":\"call\",\"timestamp\":%lld,\"device_mac\":\"%s\"}",  session_id_.c_str(),timestamp,mac.c_str() );
     snprintf(json,sizeof(json), "{\"session_id\":\"%s\","
-    "\"type\":\"emergency\",\"state\":\"call\",\"timestamp\":%lld,\"device_mac\":\"%s\"}",  session_id_.c_str(),timestamp,mac.c_str() );
-    
+     "\"type\":\"emergency\",\"state\":\"call\",\"device_mac\":\"%s\"}",  session_id_.c_str(),mac.c_str() );
     SendText(json);
 }
 

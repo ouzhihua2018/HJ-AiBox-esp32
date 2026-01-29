@@ -127,19 +127,13 @@ namespace esphome
         break;
       case State::START_MICROPHONE:
         ESP_LOGD(TAG, "Starting Microphone");
-        //this->microphone_->start();
         this->set_state_(State::STARTING_MICROPHONE);
         this->high_freq_.start();
         break;
       case State::STARTING_MICROPHONE:
-        //if (this->microphone_->is_running())
-        
         this->set_state_(State::DETECTING_WAKE_WORD);
-        
         break;
       case State::DETECTING_WAKE_WORD:
-        // 原逻辑：while (!has_enough_samples_()) { read_microphone_(); }
-        // 修复为：非阻塞检查，有数据才处理，无数据直接退出
         if (this->has_enough_samples_()) { // 仅当数据足够时才处理
           this->update_model_probabilities_();
           if (this->detect_wake_words_()) {
@@ -148,29 +142,21 @@ namespace esphome
             this->set_state_(State::STOP_MICROPHONE);
           }
         } else {
-          
           this->read_microphone_(); //do nothing,由feed直接写入ring_buffer，只需要检查ring_buffer够不够即可
         }
         break;
       case State::STOP_MICROPHONE:
         ESP_LOGD(TAG, "Stopping Microphone");
-        //this->microphone_->stop();
         this->set_state_(State::STOPPING_MICROPHONE);
-        // this->high_freq_.stop();
-        // this->unload_models_();
-        // this->deallocate_buffers_();
         break;
       case State::STOPPING_MICROPHONE:
-        //if (this->microphone_->is_stopped())
+        this->set_state_(State::IDLE);
+        if (this->detected_)
         {
-          this->set_state_(State::IDLE);
-          if (this->detected_)
-          {
-            // this->wake_word_detected_trigger_->trigger(this->detected_wake_word_);
-            this->detected_ = false;
-            this->detection_callbacks_.call(this->detected_wake_word_);
-            this->detected_wake_word_ = "";
-          }
+          // this->wake_word_detected_trigger_->trigger(this->detected_wake_word_);
+          this->detected_ = false;
+          this->detection_callbacks_.call(this->detected_wake_word_);
+          this->detected_wake_word_ = "";
         }
         break;
       }
@@ -226,9 +212,16 @@ namespace esphome
       }
       this->set_state_(State::STOP_MICROPHONE);
     }
-
+    size_t MicroWakeWord::free_ring_buffer(){
+      std::lock_guard<std::mutex> lock(mutex_);
+      //ESP_LOGI(TAG,"FREE RING_BUFFER获取锁");
+      return this->ring_buffer_->free();
+    }
+    
     void MicroWakeWord::feed(std::vector<int16_t> &data)
     {  
+      std::lock_guard<std::mutex> lock(mutex_);
+      //ESP_LOGI(TAG,"feed 获取锁");
       if (data.empty() || this->ring_buffer_ == nullptr) {
         ESP_LOGW(TAG, "Feed failed: empty data or ring buffer null");
         return;
@@ -441,11 +434,13 @@ namespace esphome
         ESP_LOGW(TAG,"lack of Samples" );
         return false;
       }
-
+      
+      std::lock_guard<std::mutex> lock(mutex_);
+      //ESP_LOGI(TAG,"音频预处理buffer获取锁");
       size_t bytes_read = this->ring_buffer_->read(
           (void *)(this->preprocessor_audio_buffer_),
           this->new_samples_to_get_() * sizeof(int16_t), pdMS_TO_TICKS(200));
-
+      
       if (bytes_read == 0)
       {
         ESP_LOGE(TAG, "Could not read data from Ring Buffer");
@@ -459,6 +454,7 @@ namespace esphome
       }
 
       size_t num_samples_read;
+      
       struct FrontendOutput frontend_output = FrontendProcessSamples(
           &this->frontend_state_, this->preprocessor_audio_buffer_,
           this->new_samples_to_get_(), &num_samples_read);

@@ -1,29 +1,38 @@
 #include "micro_wake_word_detect.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/semphr.h"
 
 #define TAG "micro_wake_word_detect"
 MicroWakeWordDetect::MicroWakeWordDetect()
 {
-
+    // 初始化互斥锁
+  
 }
 
 MicroWakeWordDetect::~MicroWakeWordDetect()
 {
-
+    // 删除互斥锁
+   
 }
 
 void MicroWakeWordDetect::InitializeWakeWordDetect()
 {
     uint8_t *model = const_cast<uint8_t *>(stream_state_internal_quant_tflite);
-
-    wakeWord_.add_wake_word_model(model, 0.99f,4, "xiaolexiaole", 30000); //22940
-    wakeWord_.set_features_step_size(7);
+    // feed一次256个样本
+    wakeWord_.add_wake_word_model(model, 0.3f,3, "xiaolexiaole", 30000); //22940
+    wakeWord_.set_features_step_size(4);    
     wakeWord_.add_detection_callback(std::move(callback_));
     wakeWord_.setup();
     esp_timer_create_args_t clock_timer_args = {
         .callback = [](void* arg) {
             MicroWakeWordDetect* this_ = (MicroWakeWordDetect*)arg;
-            this_->wakeWord_.loop();
+            // 在定时器回调中也使用互斥锁保护
+            
+                this_->wakeWord_.loop();
+              
+            
         },
         .arg = this,
         .dispatch_method = ESP_TIMER_TASK,
@@ -40,7 +49,7 @@ void MicroWakeWordDetect::StartDetection()
     vTaskDelay(pdMS_TO_TICKS(200)); //等待200ms再开启唤醒词定时器
     esp_timer_start_periodic(micro_timer_handle_,1000*1);  //1000*3    
 }
-
+    
 void MicroWakeWordDetect::Stop()
 {
     wakeWord_.stop();
@@ -56,10 +65,26 @@ void MicroWakeWordDetect::Feed(std::vector<int16_t> &data)
         return;
     }
 
-    wakeWord_.feed(data);
+    // 在写入数据时使用互斥锁保护
+   
+        wakeWord_.feed(data);
+    
 }
-
+size_t MicroWakeWordDetect::FreeSize()
+{
+    size_t free_size = 0;
+    // 在查询大小时使用互斥锁保护
+    
+    free_size = wakeWord_.free_ring_buffer();
+     
+    return free_size;
+}
 bool MicroWakeWordDetect::IsRunning()
 {   
-    return wakeWord_.is_running();
+    bool is_running = false;
+    // 在查询运行状态时使用互斥锁保护
+    
+        is_running = wakeWord_.is_running();
+    
+    return is_running;
 }

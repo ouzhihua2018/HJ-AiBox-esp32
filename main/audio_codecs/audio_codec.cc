@@ -15,15 +15,21 @@ AudioCodec::~AudioCodec() {
 }
 
 void AudioCodec::OutputData(std::vector<int16_t>& data) {
-    Write(data.data(), data.size());
+    {
+        std::lock_guard<std::mutex> lock(audio_mutex_);
+        Write(data.data(), data.size());
+    }
 }
 
 bool AudioCodec::InputData(std::vector<int16_t>& data) {
-    int samples = Read(data.data(), data.size());
-    if (samples > 0) {
-        return true;
+    {
+        std::lock_guard<std::mutex> lock(audio_mutex_);
+        int samples = Read(data.data(), data.size());
+        if (samples > 0) {
+            return true;
+        }
+        return false;
     }
-    return false;
 }
 
 void AudioCodec::Start() {
@@ -59,9 +65,10 @@ void AudioCodec::EnableInput(bool enable) {
 }
 
 void AudioCodec::EnableOutput(bool enable) {
+    ESP_LOGI(TAG, "Set output enable to %s", enable ? "true" : "false");
     if (enable == output_enabled_) {
         return;
     }
     output_enabled_ = enable;
-    ESP_LOGI(TAG, "Set output enable to %s", enable ? "true" : "false");
+    //ESP_LOGW(TAG, "Set output enable to %s", enable ? "true" : "false");
 }

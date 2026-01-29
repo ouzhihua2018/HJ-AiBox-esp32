@@ -6,7 +6,7 @@
 #include <tensorflow/lite/core/c/common.h>
 #include <tensorflow/lite/micro/micro_interpreter.h>
 #include <tensorflow/lite/micro/micro_mutable_op_resolver.h>
-
+#include <mutex>
 #include "esphome/components/microphone/microphone.h"
 #include "esphome/core/component.h"
 #include "esphome/core/ring_buffer.h"
@@ -42,6 +42,7 @@ namespace esphome
       void start();
       void stop();
       void feed(std::vector<int16_t> &data);
+      size_t free_ring_buffer();
       bool is_running() const { return this->state_ != State::IDLE; }
       
       size_t input_buffer_wr_offset_ = 0;  // 写入偏移量（下一次数据的起始位置）
@@ -77,6 +78,7 @@ namespace esphome
 #endif
 
     protected:
+      std::mutex mutex_;
       microphone::Microphone *microphone_{nullptr};
       // Trigger<std::string> *wake_word_detected_trigger_ =
       //     new Trigger<std::string>();

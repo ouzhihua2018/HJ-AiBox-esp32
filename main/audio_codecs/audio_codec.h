@@ -40,7 +40,7 @@ public:
 protected:
     i2s_chan_handle_t tx_handle_ = nullptr;
     i2s_chan_handle_t rx_handle_ = nullptr;
-
+    std::mutex audio_mutex_;
     bool duplex_ = false;
     bool input_reference_ = false;
     bool input_enabled_ = false;
@@ -50,7 +50,7 @@ protected:
     int input_channels_ = 1;
     int output_channels_ = 1;
     int output_volume_ = 70;
-
+    float input_gain_ = 0.0;
     virtual int Read(int16_t* dest, int samples) = 0;
     virtual int Write(const int16_t* data, int samples) = 0;
 };

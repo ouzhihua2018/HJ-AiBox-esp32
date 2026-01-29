@@ -85,6 +85,19 @@ Application::Application() {
         .skip_unhandled_events = true
     };
     esp_timer_create(&clock_timer_args, &clock_timer_handle_);
+    
+    // esp_timer_create_args_t microwakeword_timer_args = {
+    //     .callback = [](void* arg) {
+    //         Application* app = (Application*)arg;
+    //         app->micro_wake_word_->StartDetection();
+    //     },
+    //     .arg = this,
+    //     .dispatch_method = ESP_TIMER_TASK,
+    //     .name = "microwakeword",
+    //     .skip_unhandled_events = true
+    // };
+    // esp_timer_create(&microwakeword_timer_args, &microwakeword_timer_handle_);
+
 }
 
 Application::~Application() {
@@ -262,13 +275,18 @@ void Application::DismissAlert() {
 }
 
 void Application::PlaySound(const std::string_view& sound) {
+    //ESP_LOGI(TAG,"进入PlaySound");
+    auto codec =  Board::GetInstance().GetAudioCodec();
+    //ESP_LOGI(TAG,"当前OUTPUT_ENABLE:%d",codec->output_enabled());
     // Wait for the previous sound to finish
     {
         std::unique_lock<std::mutex> lock(mutex_);
         audio_decode_cv_.wait(lock, [this]() {
             return audio_decode_queue_.empty();
         });
+        //ESP_LOGI(TAG,"解码队列已清空，已获取锁");
     }
+    //ESP_LOGI(TAG,"离开条件变量作用域，释放锁");
     background_task_->WaitForCompletion();
 
     const char* data = sound.data();
@@ -286,8 +304,10 @@ void Application::PlaySound(const std::string_view& sound) {
         p += payload_size;
 
         std::lock_guard<std::mutex> lock(mutex_);
+        //ESP_LOGI(TAG,"PlaySound已获取锁");
         audio_decode_queue_.emplace_back(std::move(packet));
     }
+   
 }
 
 void Application::ToggleChatState() {
@@ -448,6 +468,7 @@ void Application::Start() {
     protocol_->OnIncomingAudio([this](AudioStreamPacket&& packet) {
         //ESP_LOGI(TAG,"Audio comming");
         std::lock_guard<std::mutex> lock(mutex_);
+        //ESP_LOGI(TAG,"IncomingAudio 已获取锁");
         if (device_state_ == kDeviceStateSpeaking && audio_decode_queue_.size() < MAX_AUDIO_PACKETS_IN_QUEUE) {
             audio_decode_queue_.emplace_back(std::move(packet));
         }
@@ -477,7 +498,7 @@ void Application::Start() {
         });
     });
     protocol_->OnIncomingJson([this, display](const cJSON* root) {
-        ESP_LOGW(TAG,"IncomingJson:%s",cJSON_Print(root));
+        //ESP_LOGW(TAG,"IncomingJson:%s",cJSON_Print(root));
         // Parse JSON data  
         auto type = cJSON_GetObjectItem(root, "type");
         if (strcmp(type->valuestring, "tts") == 0) {
@@ -620,6 +641,7 @@ void Application::Start() {
     audio_processor_->OnOutput([this](std::vector<int16_t>&& data) {
         {
             std::lock_guard<std::mutex> lock(mutex_);
+            //ESP_LOGI(TAG,"OnOutput已获取锁");
             if (audio_send_queue_.size() >= MAX_AUDIO_PACKETS_IN_QUEUE) {
                 ESP_LOGW(TAG, "Too many audio packets in queue, drop the newest packet");
                 return;
@@ -646,6 +668,7 @@ void Application::Start() {
                 }
 #endif
                 std::lock_guard<std::mutex> lock(mutex_);
+                //ESP_LOGI(TAG," opus_encoder已获取锁");
                 if (audio_send_queue_.size() >= MAX_AUDIO_PACKETS_IN_QUEUE) {
                     ESP_LOGW(TAG, "Too many audio packets in queue, drop the oldest packet");
                     audio_send_queue_.pop_front();
@@ -751,7 +774,8 @@ void Application::OnClockTimer() {
 // Add a async task to MainLoop
 void Application::Schedule(std::function<void()> callback) {
     {
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::lock_guard<std::mutex> lock();
+        //ESP_LOGI(TAG,"主要调度器事件获取锁");
         main_tasks_.push_back(std::move(callback));
     }
     xEventGroupSetBits(event_group_, SCHEDULE_EVENT);
@@ -769,6 +793,7 @@ void Application::MainEventLoop() {
 
         if (bits & SEND_AUDIO_EVENT) {
             std::unique_lock<std::mutex> lock(mutex_);
+            //ESP_LOGI(TAG,"音频发送事件已获取锁");
             auto packets = std::move(audio_send_queue_);
             lock.unlock();
             for (auto& packet : packets) {
@@ -780,6 +805,7 @@ void Application::MainEventLoop() {
 
         if (bits & SCHEDULE_EVENT) {
             std::unique_lock<std::mutex> lock(mutex_);
+            //ESP_LOGI(TAG,"调度器事件已获取锁");
             auto tasks = std::move(main_tasks_);
             lock.unlock();
             for (auto& task : tasks) {
@@ -810,6 +836,7 @@ void Application::OnAudioOutput() {
     const int max_silence_seconds = 10;
 
     std::unique_lock<std::mutex> lock(mutex_);
+    //ESP_LOGI(TAG,"AudioOutput锁已获取");
     if (audio_decode_queue_.empty()) {
         // Disable the output if there is no audio data for a long time
         if (device_state_ == kDeviceStateIdle) {
@@ -820,7 +847,7 @@ void Application::OnAudioOutput() {
         }
         return;
     }
-
+    //ESP_LOGI(TAG,"解码队列退包");
     auto packet = std::move(audio_decode_queue_.front());
     audio_decode_queue_.pop_front();
     lock.unlock();
@@ -862,15 +889,44 @@ void Application::OnAudioOutput() {
         last_output_time_ = std::chrono::steady_clock::now();
     });
 }
+void PrintAllChannels(const std::vector<int16_t>& raw_data) {
+    if (raw_data.size() < 4) return;
+    ESP_LOGI("ChannelDebug", "第1帧数据：");
+    ESP_LOGI("ChannelDebug", "通道1(MIC1)：%d", raw_data[0]);
+    ESP_LOGI("ChannelDebug", "通道3(DAC)：%d", raw_data[1]);
+    ESP_LOGI("ChannelDebug", "通道2(MIC2)：%d", raw_data[2]);
+    ESP_LOGI("ChannelDebug", "通道4(空)：%d", raw_data[3]);
+}
+// 从4通道TDM数据中提取麦克风1（通道1）的纯数据
+std::vector<int16_t> ExtractMic1Data(const std::vector<int16_t>& raw_data) {
+    std::vector<int16_t> mic1_data;
+    mic1_data.reserve(raw_data.size() / 4); // 预分配空间（4通道→1通道，数据量减为1/4）
 
+    // TDM数据格式：每4个int16_t对应1帧（MIC1、MIC3、MIC2、MIC4）
+    // 遍历原始数据，只取每4个值中的第1个（MIC1）
+    for (size_t i = 0; i < raw_data.size(); i += 4) {
+        mic1_data.push_back(raw_data[i]);
+    }
+
+    ESP_LOGD("AudioExtract", "提取MIC1数据：原始%d个采样点 → MIC1%d个采样点",
+             raw_data.size(), mic1_data.size());
+    return mic1_data;
+}
 void Application::OnAudioInput() {
     if(micro_wake_word_->IsRunning()){
-        std::vector<int16_t> data;
-        if (ReadAudio(data, 16000,256)) {   //16ms一帧 
-            micro_wake_word_->Feed(data);
-            return;
-        }   
+        if(micro_wake_word_->FreeSize()>16) 
+        {
+            std::vector<int16_t> raw_data;
+            if (ReadAudio(raw_data, 16000,1024)) {   //16ms一帧  256*4
+            //PrintAllChannels(raw_data); // 打印第一帧，看哪个通道有有效数据
+                std::vector<int16_t> mic1_data = ExtractMic1Data(raw_data);
+                micro_wake_word_->Feed(mic1_data);  
+                return;
+            }   
+        }
     }
+    
+    
     if (audio_processor_->IsRunning()) {
         std::vector<int16_t> data;
         int samples = audio_processor_->GetFeedSize();
@@ -884,7 +940,7 @@ void Application::OnAudioInput() {
 
     vTaskDelay(pdMS_TO_TICKS(OPUS_FRAME_DURATION_MS / 2));
 }
- 
+ //这里的samples只是数据大小，比如单通道，那samples=1就是读一个通道，4通道的也只是读一个，要读一帧samples=4
 bool Application::ReadAudio(std::vector<int16_t>& data, int sample_rate, int samples) {
     auto codec = Board::GetInstance().GetAudioCodec();
     if (!codec->input_enabled()) {
@@ -892,6 +948,7 @@ bool Application::ReadAudio(std::vector<int16_t>& data, int sample_rate, int sam
     }
 
     if (codec->input_sample_rate() != sample_rate) {
+        //ESP_LOGI(TAG,"samples diff %d ->%d",codec->input_sample_rate(),sample_rate);
         data.resize(samples * codec->input_sample_rate() / sample_rate);
         if (!codec->InputData(data)) {
             return false;
@@ -902,7 +959,7 @@ bool Application::ReadAudio(std::vector<int16_t>& data, int sample_rate, int sam
             for (size_t i = 0, j = 0; i < mic_channel.size(); ++i, j += 2) {
                 mic_channel[i] = data[j];
                 reference_channel[i] = data[j + 1];
-            }
+            } //默认偶数为refer
             auto resampled_mic = std::vector<int16_t>(input_resampler_.GetOutputSamples(mic_channel.size()));
             auto resampled_reference = std::vector<int16_t>(reference_resampler_.GetOutputSamples(reference_channel.size()));
             input_resampler_.Process(mic_channel.data(), mic_channel.size(), resampled_mic.data());
@@ -1159,6 +1216,8 @@ void Application::EmergencyWake()
         // 2. 东八区转 UTC：减去 8 小时（8×3600×1000 = 28800000 毫秒）
         int64_t utc_timestamp_ms = beijing_timestamp_ms - 8 * 3600 * 1000;
         std::string mac_address = SystemInfo::GetMacAddress();
+        ESP_LOGI("EmergencyWake", "UTC时间戳(ms)：%" PRId64, utc_timestamp_ms);
+
         protocol_->SendEmergencyMessage(utc_timestamp_ms,mac_address);
     }
 }

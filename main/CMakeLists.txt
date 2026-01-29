@@ -1,5 +1,5 @@
 set(SOURCES "audio_codecs/audio_codec.cc"
-            "audio_codecs/no_audio_codec.cc"
+            "audio_codecs/box_audio_codec.cc"
             "audio_processing/audio_debugger.cc"
             "led/single_led.cc"
             "led/circular_strip.cc"
