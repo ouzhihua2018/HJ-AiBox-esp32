@@ -47,7 +47,7 @@ if(CONFIG_USE_AUDIO_PROCESSOR)
 else()
     list(APPEND SOURCES "audio_processing/no_audio_processor.cc")
 endif()
-
+list(APPEND SOURCES "audio_processing/afe_wake_word.cc")
 list(APPEND SOURCES "audio_processing/micro_wake_word_detect.cc")
 list(APPEND SOURCES "audio_processing/model.cc")
 

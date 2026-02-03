@@ -17,6 +17,7 @@ AudioCodec::~AudioCodec() {
 void AudioCodec::OutputData(std::vector<int16_t>& data) {
     {
         std::lock_guard<std::mutex> lock(audio_mutex_);
+        //ESP_LOGI(TAG,"OutputData已获取CODEC锁");
         Write(data.data(), data.size());
     }
 }
@@ -24,6 +25,7 @@ void AudioCodec::OutputData(std::vector<int16_t>& data) {
 bool AudioCodec::InputData(std::vector<int16_t>& data) {
     {
         std::lock_guard<std::mutex> lock(audio_mutex_);
+        //ESP_LOGI(TAG,"InputData已获取CODEC锁");
         int samples = Read(data.data(), data.size());
         if (samples > 0) {
             return true;

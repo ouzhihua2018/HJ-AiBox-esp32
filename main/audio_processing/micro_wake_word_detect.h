@@ -15,6 +15,11 @@
 #pragma once
 #include "esphome/components/micro_wake_word/micro_wake_word.h"
 #include "freertos/semphr.h"
+// #define DETECT_EVENT_BIT 1
+// #define DETECT_TASK_PRIO 3
+// #define DETECT_TASK_CORE 1
+// #define DETECT_TASK_STACK 4096 * 2 // 模型推理需要大栈，设为8K足够
+// #define DETECT_INTERVAL_MS 4       // 固定4ms检测，匹配模型步长
 
 class MicroWakeWordDetect{
 public:
@@ -23,15 +28,18 @@ public:
     void InitializeWakeWordDetect();
     void OnWakeWordDetected(std::function<void(std::string wake_word)> callback) {callback_=callback;} ;
     void StartDetection();
-    void Feed(std::vector<int16_t>& data) ;
+    void Feed(const std::vector<int16_t>& data) ;
     size_t FreeSize();
     void Stop();
     bool IsRunning();
+    //TaskHandle_t detect_task_handle_ = nullptr;       // 新增：检测任务句柄
+    //EventGroupHandle_t detect_event;
+    esphome::micro_wake_word::MicroWakeWord wakeWord_ ;
 private:
     std::function<void(std::string wake_word)> callback_;
-    esphome::micro_wake_word::MicroWakeWord wakeWord_ ;
     bool Detected_;
     esp_timer_handle_t micro_timer_handle_;
     //SemaphoreHandle_t mutex_;  // 添加互斥锁保护共享资源
+  
 };
 #endif

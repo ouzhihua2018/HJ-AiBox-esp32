@@ -45,8 +45,8 @@ std::string Ota::GetCheckVersionUrl() {
     std::string url = settings.GetString("ota_url");
     // if (url.empty()) {
     //     url = CONFIG_OTA_URL;
-    // }
-    url = "http://core.device.158box.com/xiaozhi/ota2/";
+    // }//http://core.device.158box.com/xiaozhi/ota2/
+    url = "https://api.tenclass.net/xiaozhi/ota/";    //https://api.tenclass.net/xiaozhi/ota/
     return url;
 }
 

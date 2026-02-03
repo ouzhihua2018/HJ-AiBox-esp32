@@ -25,7 +25,7 @@
 #else
 #include "no_audio_processor.h"
 #endif
-
+#include "afe_wake_word.h"
 
 
 
@@ -70,7 +70,7 @@ Application::Application() {
 #else
     audio_processor_ = std::make_unique<NoAudioProcessor>();
 #endif
-
+   wake_word_ = std::make_unique<AfeWakeWord>();
    micro_wake_word_ = std::make_unique<MicroWakeWordDetect>();
 
    
@@ -158,7 +158,7 @@ void Application::CheckNewVersion() {
 
             auto& board = Board::GetInstance();
             board.SetPowerSaveMode(false);
-           
+            wake_word_->StopDetection();
             micro_wake_word_->Stop();
             // 预先关闭音频输出，避免升级过程有音频操作
             auto codec = board.GetAudioCodec();
@@ -693,9 +693,10 @@ void Application::Start() {
             });
         }
     });
-
+    wake_word_->Initialize(codec);
     micro_wake_word_->OnWakeWordDetected([this](const std::string& wake_word){
         Schedule([this, &wake_word]() {
+            wake_word_->StopDetection();
             if (!protocol_) {
                 return;
             }
@@ -704,6 +705,7 @@ void Application::Start() {
                     SetDeviceState(kDeviceStateConnecting);
                     if (!protocol_->OpenAudioChannel()) {
                         micro_wake_word_->StartDetection();
+                        wake_word_->StartDetection();
                         return;
                     }
                 }
@@ -721,7 +723,7 @@ void Application::Start() {
     );
     micro_wake_word_->InitializeWakeWordDetect();
     micro_wake_word_->StartDetection();
-    
+    wake_word_->StartDetection();
     // Wait for the new version check to finish
     xEventGroupWaitBits(event_group_, CHECK_NEW_VERSION_DONE_EVENT, pdTRUE, pdFALSE, portMAX_DELAY);
     
@@ -821,6 +823,7 @@ void Application::AudioLoop() {
     while (true) {
         OnAudioInput(); 
         if (codec->output_enabled()) {
+            ///ESP_LOGI(TAG,"输出使能");
             OnAudioOutput();
         }
     }
@@ -852,19 +855,21 @@ void Application::OnAudioOutput() {
     audio_decode_queue_.pop_front();
     lock.unlock();
     audio_decode_cv_.notify_all();
-
+    //ESP_LOGI(TAG,"已释放锁，并通知条件变量");
     // Synchronize the sample rate and frame duration
     SetDecodeSampleRate(packet.sample_rate, packet.frame_duration);
-
+    //ESP_LOGI(TAG,"SetDecodeSampleRate");
     busy_decoding_audio_ = true;
     background_task_->Schedule([this, codec, packet = std::move(packet)]() mutable {
         busy_decoding_audio_ = false;
         if (aborted_) {
+            ESP_LOGI(TAG,"aborted!");
             return;
         }
 
         std::vector<int16_t> pcm;
         if (!opus_decoder_->Decode(std::move(packet.payload), pcm)) {
+            //ESP_LOGI(TAG,"解码OPUS失败");
             return;
         }
         
@@ -881,6 +886,7 @@ void Application::OnAudioOutput() {
             output_resampler_.Process(pcm.data(), pcm.size(), resampled.data());
             pcm = std::move(resampled);
         }
+        //ESP_LOGI(TAG,"输出采样率调整");
         codec->OutputData(pcm);
 #ifdef CONFIG_USE_SERVER_AEC
         std::lock_guard<std::mutex> lock(timestamp_mutex_);
@@ -913,20 +919,19 @@ std::vector<int16_t> ExtractMic1Data(const std::vector<int16_t>& raw_data) {
     return mic1_data;
 }
 void Application::OnAudioInput() {
-    if(micro_wake_word_->IsRunning()){
-        if(micro_wake_word_->FreeSize()>16) 
-        {
-            std::vector<int16_t> raw_data;
-            if (ReadAudio(raw_data, 16000,1024)) {   //16ms一帧  256*4
-            //PrintAllChannels(raw_data); // 打印第一帧，看哪个通道有有效数据
-                std::vector<int16_t> mic1_data = ExtractMic1Data(raw_data);
-                micro_wake_word_->Feed(mic1_data);  
+    if (wake_word_->IsDetectionRunning()) {
+        std::vector<int16_t> data;
+        int samples = wake_word_->GetFeedSize();  //512*2 = 1024个采样点 1个采样点2byte
+        if (samples > 0) {
+            //ESP_LOGI(TAG,"samples :%d",samples);
+            if (ReadAudio(data, 16000, samples)) {
+                wake_word_->Feed(data);
                 return;
-            }   
+            }
         }
+ 
     }
-    
-    
+  
     if (audio_processor_->IsRunning()) {
         std::vector<int16_t> data;
         int samples = audio_processor_->GetFeedSize();
@@ -1026,6 +1031,7 @@ void Application::SetDeviceState(DeviceState state) {
             display->SetEmotion("neutral");
             audio_processor_->Stop();
             micro_wake_word_->StartDetection();
+            wake_word_->StartDetection();
             break;
         case kDeviceStateConnecting:
             display->SetStatus(Lang::Strings::CONNECTING);
@@ -1053,16 +1059,19 @@ void Application::SetDeviceState(DeviceState state) {
                 }
                 opus_encoder_->ResetState();
                 audio_processor_->Start();
+                wake_word_->StopDetection();
                 micro_wake_word_->Stop();
             }
             break;
         case kDeviceStateSpeaking:
             display->SetStatus(Lang::Strings::SPEAKING);
-
+            //由于鼎乐并不支持实时模式，暂时屏蔽这条判断
             if (listening_mode_ != kListeningModeRealtime) {
+                ESP_LOGI(TAG,"非实时模式");
                 audio_processor_->Stop();
-                // Only AFE wake word can be detected in speaking mode
+                // Only AFE wake word can be detected in speaking mode 
                 micro_wake_word_->StartDetection();
+                wake_word_->StartDetection();
             }
             ResetDecoder();
             break;

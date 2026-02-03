@@ -38,10 +38,10 @@ namespace esphome
       void loop() override;
       float get_setup_priority() const override;
       void dump_config() override;
-      std::unique_ptr<RingBuffer> ring_buffer_;
+      std::unique_ptr<RingBuffer> ring_buffer_;  //1024个采样点
       void start();
       void stop();
-      void feed(std::vector<int16_t> &data);
+      void feed(const std::vector<int16_t> &data);
       size_t free_ring_buffer();
       bool is_running() const { return this->state_ != State::IDLE; }
       

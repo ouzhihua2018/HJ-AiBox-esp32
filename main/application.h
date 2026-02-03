@@ -23,7 +23,7 @@
 #include "audio_processor.h"
 #include "micro_wake_word_detect.h"
 #include "audio_debugger.h"
-
+#include "wake_word.h"
 
 
 #define SCHEDULE_EVENT (1 << 0)
@@ -83,12 +83,14 @@ public:
     void SetAecMode(AecMode mode);
     AecMode GetAecMode() const { return aec_mode_; }
     BackgroundTask* GetBackgroundTask() const { return background_task_; }
-    
+    std::unique_ptr<WakeWord> wake_word_;
+    std::unique_ptr<MicroWakeWordDetect> micro_wake_word_;
 private:
     Application();
     ~Application();
     std::unique_ptr<Protocol> protocol_;
-    std::unique_ptr<MicroWakeWordDetect> micro_wake_word_;
+    
+    
     std::unique_ptr<AudioProcessor> audio_processor_;
     std::unique_ptr<AudioDebugger> audio_debugger_;
     Ota ota_;

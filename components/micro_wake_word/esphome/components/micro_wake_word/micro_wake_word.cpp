@@ -139,6 +139,7 @@ namespace esphome
           if (this->detect_wake_words_()) {
             ESP_LOGW(TAG, "Wake Word '%s' Detected", this->detected_wake_word_.c_str());
             this->detected_ = true;
+            this->detection_callbacks_.call(this->detected_wake_word_);
             this->set_state_(State::STOP_MICROPHONE);
           }
         } else {
@@ -155,7 +156,6 @@ namespace esphome
         {
           // this->wake_word_detected_trigger_->trigger(this->detected_wake_word_);
           this->detected_ = false;
-          this->detection_callbacks_.call(this->detected_wake_word_);
           this->detected_wake_word_ = "";
         }
         break;
@@ -218,7 +218,7 @@ namespace esphome
       return this->ring_buffer_->free();
     }
     
-    void MicroWakeWord::feed(std::vector<int16_t> &data)
+    void MicroWakeWord::feed(const std::vector<int16_t> &data)
     {  
       std::lock_guard<std::mutex> lock(mutex_);
       //ESP_LOGI(TAG,"feed 获取锁");
@@ -226,8 +226,8 @@ namespace esphome
         ESP_LOGW(TAG, "Feed failed: empty data or ring buffer null");
         return;
       }
-      if (data.size() > 256) {
-        ESP_LOGE(TAG, "Input data size(%zu) exceeds max length(256)", data.size());
+      if (data.size() > 1024) {   //ring_buffer_目前大小1024个采样点
+        ESP_LOGE(TAG, "Input data size(%zu) exceeds max length(1024)", data.size());
         return;
       }
 
@@ -236,7 +236,8 @@ namespace esphome
 
       // 空间不足时重置（保留原有逻辑）
       if (bytes_free < data_bytes) {
-        ESP_LOGW(TAG, "Ring buffer full, reset (free: %zu, need: %zu)", bytes_free, data_bytes);
+        //ESP_LOGW(TAG, "Ring buffer full, 环形覆盖 (free: %zu, need: %zu)", bytes_free, data_bytes);
+        //size_t bytes_written = this->ring_buffer_->write((void *)data.data(),bytes_free);
         this->ring_buffer_->reset();
       }
 
@@ -292,7 +293,7 @@ namespace esphome
 
       if (this->ring_buffer_ == nullptr)
       {
-        this->ring_buffer_ = RingBuffer::create(BUFFER_SIZE * sizeof(int16_t));  //1024
+        this->ring_buffer_ = RingBuffer::create(8192 * sizeof(int16_t));  //1024 * 2
         if (this->ring_buffer_ == nullptr)
         {
           ESP_LOGE(TAG, "Could not allocate ring buffer");
