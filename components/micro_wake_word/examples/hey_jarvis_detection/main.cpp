@@ -8,9 +8,9 @@
 #include "hey_jarvis.h"
 
 // INMP441 microphone
-#define I2S_BCK_PIN GPIO_NUM_1
-#define I2S_SD_PIN GPIO_NUM_2
-#define I2S_WS_PIN GPIO_NUM_3
+#define I2S_BCK_PIN GPIO_NUM_NC
+#define I2S_SD_PIN GPIO_NUM_NC
+#define I2S_WS_PIN GPIO_NUM_NC
 #define I2S_PORT I2S_NUM_0
 #define SAMPLE_RATE_HZ 16000
 
