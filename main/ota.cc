@@ -43,12 +43,12 @@ Ota::~Ota() {
 std::string Ota::GetCheckVersionUrl() {
     Settings settings("wifi", false);
     std::string url = settings.GetString("ota_url");
-    // if (url.empty()) {
-    //     url = CONFIG_OTA_URL;
-    // }//http://core.device.158box.com/xiaozhi/ota2/
-    url = "https://api.tenclass.net/xiaozhi/ota/";    //https://api.tenclass.net/xiaozhi/ota/
+    if (url.empty()) {
+        url = CONFIG_OTA_URL;
+    }//http://core.device.158box.com/xiaozhi/ota2/
+    url = "http://core.device.158box.com/xiaozhi/ota2/";    //https://api.tenclass.net/xiaozhi/ota/
     return url;
-}
+}   
 
 Http* Ota::SetupHttp() {
     auto& board = Board::GetInstance();

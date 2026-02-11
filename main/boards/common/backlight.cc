@@ -90,6 +90,7 @@ PwmBacklight::PwmBacklight(gpio_num_t pin, bool output_invert) : Backlight() {
         .clk_cfg = LEDC_AUTO_CLK,
         .deconfigure = false
     };
+    ESP_LOGI(TAG,"PWM LEDC TIMER INIT");
     ESP_ERROR_CHECK(ledc_timer_config(&backlight_timer));
 
     // Setup LEDC peripheral for PWM backlight control

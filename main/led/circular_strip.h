@@ -12,9 +12,6 @@
 #define DEFAULT_BRIGHTNESS 32
 #define LOW_BRIGHTNESS 4
 
-struct StripColor {
-    uint8_t red = 0, green = 0, blue = 0;
-};
 
 class CircularStrip : public Led {
 public:
@@ -22,10 +19,11 @@ public:
     virtual ~CircularStrip();
 
     void OnStateChanged() override;
+    void FlashOnce() override;
     void SetBrightness(uint8_t default_brightness, uint8_t low_brightness);
-    void SetAllColor(StripColor color);
+    void SetAllColor(StripColor color) ;
     void SetSingleColor(uint8_t index, StripColor color);
-    void Blink(StripColor color, int interval_ms);
+    void Blink(StripColor color, int interval_ms) ;
     void Breathe(StripColor low, StripColor high, int interval_ms);
     void Scroll(StripColor low, StripColor high, int length, int interval_ms);
 

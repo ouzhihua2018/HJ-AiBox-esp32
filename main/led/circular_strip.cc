@@ -248,3 +248,10 @@ void CircularStrip::OnStateChanged() {
             return;
     }
 }
+
+void CircularStrip::FlashOnce()
+{   
+    StripColor color = { default_brightness_, low_brightness_, low_brightness_ };
+    SetAllColor( color);
+    FadeOut(100);
+}

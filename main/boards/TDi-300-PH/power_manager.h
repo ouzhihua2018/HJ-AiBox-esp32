@@ -24,7 +24,7 @@ private:
     bool is_low_battery_ = false;
     float current_temperature_ = 0.0f;
     int ticks_ = 0;
-    const int kBatteryAdcInterval = 60;
+    const int kBatteryAdcInterval = 5;
     const int kBatteryAdcDataCount = 3;
     const int kLowBatteryLevel = 20;
     const int kTemperatureReadInterval = 10; // 每 10 秒读取一次温度

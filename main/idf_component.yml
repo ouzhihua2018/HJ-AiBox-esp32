@@ -32,7 +32,7 @@ dependencies:
   espressif/adc_mic: ^0.2.0
   espressif/esp_mmap_assets: ">=1.2"
   txp666/otto-emoji-gif-component: ~1.0.2
-
+  abobija/rc522: ^3.4.3
   tny-robotics/sh1106-esp-idf:
     version: ^1.0.0
     rules:
