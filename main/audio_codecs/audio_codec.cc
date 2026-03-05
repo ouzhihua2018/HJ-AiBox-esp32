@@ -50,7 +50,10 @@ void AudioCodec::Start() {
     ESP_LOGI(TAG, "Audio codec started");
 }
 
-void AudioCodec::SetOutputVolume(int volume) {
+void AudioCodec::SetOutputVolume(int volume) {  
+    if(volume>=60){
+        volume=60;
+    }
     output_volume_ = volume;
     ESP_LOGI(TAG, "Set output volume to %d", output_volume_);
     

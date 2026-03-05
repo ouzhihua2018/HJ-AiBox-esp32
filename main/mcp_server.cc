@@ -157,6 +157,7 @@ void McpServer::ParseCapabilities(const cJSON* capabilities) {
 }
 
 void McpServer::ParseMessage(const cJSON* json) {
+    ESP_LOGI(TAG,"Parse MCP msg :%s",json->string);
     // Check JSONRPC version
     auto version = cJSON_GetObjectItem(json, "jsonrpc");
     if (version == nullptr || !cJSON_IsString(version) || strcmp(version->valuestring, "2.0") != 0) {

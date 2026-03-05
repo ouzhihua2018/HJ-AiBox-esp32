@@ -1,4 +1,4 @@
-由于添加了唤醒词components组件，导致原有的管理组件依赖混乱，需手动在opus-encoder中添加REQUIRES 78__esp-opus
+由于添加了唤醒词components组件，导致原有的管理组件依赖混乱，需手动在opus-encoder中添加REQUIRES 78__esp-opus   若4G无法连接鼎乐MQTT，尝试将MQtt.h 中 int keep_alive_seconds_ = 30;改大
 # An MCP-based Chatbot | 一个基于 MCP 的聊天机器人
 
 （中文 | [English](README_en.md) | [日本語](README_ja.md)）

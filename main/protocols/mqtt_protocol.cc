@@ -79,6 +79,7 @@ bool MqttProtocol::StartMqttClient(bool report_error) {
             ESP_LOGI(TAG, "Received goodbye message, session_id: %s", session_id ? session_id->valuestring : "null");
             if (session_id == nullptr || session_id_ == session_id->valuestring) {
                 Application::GetInstance().Schedule([this]() {
+                    ESP_LOGI(TAG, "关闭音频通道");
                     CloseAudioChannel();
                 });
             }

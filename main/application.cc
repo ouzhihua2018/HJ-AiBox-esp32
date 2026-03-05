@@ -12,7 +12,7 @@
 #include "mcp_server.h"
 #include "audio_debugger.h"
 #include "settings.h"
-
+#include "core_monitor.h"
 
 #include <cstring>
 #include <cmath>
@@ -86,17 +86,18 @@ Application::Application() {
     };
     esp_timer_create(&clock_timer_args, &clock_timer_handle_);
     
-    // esp_timer_create_args_t microwakeword_timer_args = {
-    //     .callback = [](void* arg) {
-    //         Application* app = (Application*)arg;
-    //         app->micro_wake_word_->StartDetection();
-    //     },
-    //     .arg = this,
-    //     .dispatch_method = ESP_TIMER_TASK,
-    //     .name = "microwakeword",
-    //     .skip_unhandled_events = true
-    // };
-    // esp_timer_create(&microwakeword_timer_args, &microwakeword_timer_handle_);
+    esp_timer_create_args_t microwakeword_timer_args = {
+        .callback = [](void* arg) {
+            Application* app = (Application*)arg;
+            app->micro_wake_word_->StartDetection();
+            app->wake_word_->StartDetection();
+        },
+        .arg = this,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "microwakeword",
+        .skip_unhandled_events = true
+    };
+    esp_timer_create(&microwakeword_timer_args, &microwakeword_timer_handle_);
 
 }
 
@@ -722,8 +723,9 @@ void Application::Start() {
     }
     );
     micro_wake_word_->InitializeWakeWordDetect();
-    micro_wake_word_->StartDetection();
-    wake_word_->StartDetection();
+    // micro_wake_word_->StartDetection();
+    // wake_word_->StartDetection();
+    esp_timer_start_once(microwakeword_timer_handle_,1000*1000*5);
     // Wait for the new version check to finish
     xEventGroupWaitBits(event_group_, CHECK_NEW_VERSION_DONE_EVENT, pdTRUE, pdFALSE, portMAX_DELAY);
     
@@ -740,7 +742,7 @@ void Application::Start() {
     SetDeviceState(kDeviceStateIdle);
     // Print heap stats
     SystemInfo::PrintHeapStats();
-    
+    //start_core1_monitor();
     // Enter the main event loop
     MainEventLoop(); //经过AFE处理后的音频发送任务和主要调度任务
 }
@@ -788,7 +790,7 @@ void Application::Schedule(std::function<void()> callback) {
 // they should use Schedule to call this function
 void Application::MainEventLoop() {
     // Raise the priority of the main event loop to avoid being interrupted by background tasks (which has priority 2)
-    vTaskPrioritySet(NULL, 3);
+    vTaskPrioritySet(NULL, 6);
 
     while (true) {
         auto bits = xEventGroupWaitBits(event_group_, SCHEDULE_EVENT | SEND_AUDIO_EVENT, pdTRUE, pdFALSE, portMAX_DELAY);
@@ -934,7 +936,8 @@ void Application::OnAudioInput() {
   
     if (audio_processor_->IsRunning()) {
         std::vector<int16_t> data;
-        int samples = audio_processor_->GetFeedSize();
+        int samples = audio_processor_->GetFeedSize();//由于初始化时是MR，那feedsize应该是512*2
+        
         if (samples > 0) {
             if (ReadAudio(data, 16000, samples)) {
                 audio_processor_->Feed(data);
@@ -987,9 +990,9 @@ bool Application::ReadAudio(std::vector<int16_t>& data, int sample_rate, int sam
     }
     
     // 音频调试：发送原始音频数据
-    if (audio_debugger_) {
-        audio_debugger_->Feed(data);
-    }
+    // if (audio_debugger_) {
+    //     audio_debugger_->Feed(data);
+    // }
     
     return true;
 }
@@ -1030,8 +1033,11 @@ void Application::SetDeviceState(DeviceState state) {
             display->SetStatus(Lang::Strings::STANDBY);
             display->SetEmotion("neutral");
             audio_processor_->Stop();
-            micro_wake_word_->StartDetection();
-            wake_word_->StartDetection();
+            if(!micro_wake_word_->IsRunning()){
+                micro_wake_word_->StartDetection();
+                wake_word_->StartDetection();
+            }
+           
             break;
         case kDeviceStateConnecting:
             display->SetStatus(Lang::Strings::CONNECTING);
@@ -1059,8 +1065,11 @@ void Application::SetDeviceState(DeviceState state) {
                 }
                 opus_encoder_->ResetState();
                 audio_processor_->Start();
-                wake_word_->StopDetection();
-                micro_wake_word_->Stop();
+
+                if(micro_wake_word_->IsRunning()){
+                    wake_word_->StopDetection();
+                    micro_wake_word_->Stop();
+                }
             }
             break;
         case kDeviceStateSpeaking:
@@ -1070,8 +1079,10 @@ void Application::SetDeviceState(DeviceState state) {
                 ESP_LOGI(TAG,"非实时模式");
                 audio_processor_->Stop();
                 // Only AFE wake word can be detected in speaking mode 
-                micro_wake_word_->StartDetection();
-                wake_word_->StartDetection();
+                if(!micro_wake_word_->IsRunning()){
+                    micro_wake_word_->StartDetection();
+                    wake_word_->StartDetection();
+                }
             }
             ResetDecoder();
             break;

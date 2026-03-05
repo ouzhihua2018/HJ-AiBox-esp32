@@ -15,6 +15,7 @@
 
 AudioDebugger::AudioDebugger() {
 #if CONFIG_USE_AUDIO_DEBUGGER
+
     udp_sockfd_ = socket(AF_INET, SOCK_DGRAM, 0);
     if (udp_sockfd_ >= 0) {
         // 解析配置的服务器地址 "IP:PORT"

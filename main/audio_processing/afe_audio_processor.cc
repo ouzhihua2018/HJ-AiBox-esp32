@@ -1,6 +1,6 @@
 #include "afe_audio_processor.h"
 #include <esp_log.h>
-
+#include "application.h""
 #define PROCESSOR_RUNNING 0x01
 
 #define TAG "AfeAudioProcessor"
@@ -67,6 +67,7 @@ size_t AfeAudioProcessor::GetFeedSize() {
     if (afe_data_ == nullptr) {
         return 0;
     }
+    //ESP_LOGI(TAG,"apr feed size:%d",afe_iface_->get_feed_chunksize(afe_data_));
     return afe_iface_->get_feed_chunksize(afe_data_) * codec_->input_channels();
 }
 
@@ -105,7 +106,7 @@ void AfeAudioProcessor::AudioProcessorTask() {
     auto feed_size = afe_iface_->get_feed_chunksize(afe_data_);
     ESP_LOGI(TAG, "Audio communication task started, feed size: %d fetch size: %d",
         feed_size, fetch_size);
-
+    Application& app = Application::GetInstance();
     while (true) {
         xEventGroupWaitBits(event_group_, PROCESSOR_RUNNING, pdFALSE, pdTRUE, portMAX_DELAY);
 
@@ -130,10 +131,14 @@ void AfeAudioProcessor::AudioProcessorTask() {
                 vad_state_change_callback_(false);
             }
         }
-
+        // if (app.audio_debugger_) {
+        //     app.audio_debugger_->Feed(std::vector<int16_t>(res->data, res->data + res->data_size / sizeof(int16_t)));
+        //     vTaskDelay(pdMS_TO_TICKS(90 / 2));
+        //     }
         if (output_callback_) {
             output_callback_(std::vector<int16_t>(res->data, res->data + res->data_size / sizeof(int16_t)));
         }
+     
     }
 }
 

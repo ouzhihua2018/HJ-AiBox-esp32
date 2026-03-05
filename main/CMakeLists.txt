@@ -1,6 +1,5 @@
 set(SOURCES "audio_codecs/audio_codec.cc"
             "audio_codecs/box_audio_codec.cc"
-            "audio_codecs/no_audio_codec.cc"
             "audio_processing/audio_debugger.cc"
             "led/circular_strip.cc"
             "display/display.cc"
@@ -18,6 +17,7 @@ set(SOURCES "audio_codecs/audio_codec.cc"
             "settings.cc"
             "background_task.cc"
             "main.cc"
+            "core_monitor.cc"
             )
 
 set(INCLUDE_DIRS "." "display" "audio_codecs" "protocols" "audio_processing")
@@ -41,11 +41,9 @@ file(GLOB BOARD_SOURCES
 list(APPEND SOURCES ${BOARD_SOURCES})
 
 
-if(CONFIG_USE_AUDIO_PROCESSOR)
-    list(APPEND SOURCES "audio_processing/afe_audio_processor.cc")
-else()
-    list(APPEND SOURCES "audio_processing/no_audio_processor.cc")
-endif()
+
+list(APPEND SOURCES "audio_processing/afe_audio_processor.cc")
+
 list(APPEND SOURCES "audio_processing/afe_wake_word.cc")
 list(APPEND SOURCES "audio_processing/micro_wake_word_detect.cc")
 list(APPEND SOURCES "audio_processing/model.cc")

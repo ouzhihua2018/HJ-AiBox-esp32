@@ -49,7 +49,7 @@ enum DeviceState {
     kDeviceStateFatalError
 };
 
-#define OPUS_FRAME_DURATION_MS 60
+#define OPUS_FRAME_DURATION_MS 60   //60
 #define MAX_AUDIO_PACKETS_IN_QUEUE (2400 / OPUS_FRAME_DURATION_MS)
 
 class Application {
@@ -85,6 +85,7 @@ public:
     BackgroundTask* GetBackgroundTask() const { return background_task_; }
     std::unique_ptr<WakeWord> wake_word_;
     std::unique_ptr<MicroWakeWordDetect> micro_wake_word_;
+    std::unique_ptr<AudioDebugger> audio_debugger_;
 private:
     Application();
     ~Application();
@@ -92,7 +93,7 @@ private:
     
     
     std::unique_ptr<AudioProcessor> audio_processor_;
-    std::unique_ptr<AudioDebugger> audio_debugger_;
+  
     Ota ota_;
     std::mutex mutex_;
     std::list<std::function<void()>> main_tasks_;
