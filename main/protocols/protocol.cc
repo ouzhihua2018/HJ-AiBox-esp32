@@ -56,6 +56,15 @@ void Protocol::SendEmergencyMessage(const int64_t &timestamp, std::string mac)
     SendText(json);
 }
 
+void Protocol::SendRfidMessage(std::string mac ,std::string uid)
+{   
+    char json[512];
+    snprintf(json,sizeof(json), "{\"session_id\":\"%s\",""\"type\":\"rfid\",\"state\":\"character switch\",\"uuid\":\"%s\", \"device_mac\":\"%s\"}",
+    session_id_.c_str(),uid.c_str(),mac.c_str());
+    ESP_LOGI(TAG,"Send Rifd Msg: %s",json);
+    SendText(json);
+}
+
 void Protocol::SendStartListening(ListeningMode mode) {
     std::string message = "{\"session_id\":\"" + session_id_ + "\"";
     message += ",\"type\":\"listen\",\"state\":\"start\"";

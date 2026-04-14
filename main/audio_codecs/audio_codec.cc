@@ -16,7 +16,7 @@ AudioCodec::~AudioCodec() {
 
 void AudioCodec::OutputData(std::vector<int16_t>& data) {
     {
-        std::lock_guard<std::mutex> lock(audio_mutex_);
+        std::lock_guard<std::mutex> lock(audio_input_mutex_);
         //ESP_LOGI(TAG,"OutputData已获取CODEC锁");
         Write(data.data(), data.size());
     }
@@ -24,10 +24,11 @@ void AudioCodec::OutputData(std::vector<int16_t>& data) {
 
 bool AudioCodec::InputData(std::vector<int16_t>& data) {
     {
-        std::lock_guard<std::mutex> lock(audio_mutex_);
+        std::lock_guard<std::mutex> lock(audio_output_mutex_);
         //ESP_LOGI(TAG,"InputData已获取CODEC锁");
         int samples = Read(data.data(), data.size());
         if (samples > 0) {
+            //ESP_LOGI(TAG,"InputData成功读出数据");
             return true;
         }
         return false;
@@ -41,7 +42,7 @@ void AudioCodec::Start() {
         ESP_LOGW(TAG, "Output volume value (%d) is too small, setting to default (10)", output_volume_);
         output_volume_ = 10;
     }
-
+    //output_volume_ = 50;
     ESP_ERROR_CHECK(i2s_channel_enable(tx_handle_));
     ESP_ERROR_CHECK(i2s_channel_enable(rx_handle_));
 
@@ -51,9 +52,9 @@ void AudioCodec::Start() {
 }
 
 void AudioCodec::SetOutputVolume(int volume) {  
-    if(volume>=60){
-        volume=60;
-    }
+    // if(volume>=60){
+    //     volume=60;
+    // }
     output_volume_ = volume;
     ESP_LOGI(TAG, "Set output volume to %d", output_volume_);
     

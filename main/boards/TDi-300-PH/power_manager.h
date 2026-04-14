@@ -6,8 +6,6 @@
 #include <driver/gpio.h>
 #include <esp_adc/adc_oneshot.h>
 #include <driver/temperature_sensor.h> 
-#include "application.h"
-
 
 class PowerManager {
 private:
@@ -15,6 +13,7 @@ private:
     esp_timer_handle_t timer_handle_;
     std::function<void(bool)> on_charging_status_changed_;
     std::function<void(bool)> on_low_battery_status_changed_;
+    std::function<void(uint8_t)> on_battery_warning_level_changed_;
     std::function<void(float)> on_temperature_changed_; 
 
     gpio_num_t charging_pin_ = GPIO_NUM_NC;
@@ -22,11 +21,15 @@ private:
     uint32_t battery_level_ = 0;
     bool is_charging_ = false;
     bool is_low_battery_ = false;
+    bool warned_30_percent_ = false;
+    bool warned_20_percent_ = false;
     float current_temperature_ = 0.0f;
     int ticks_ = 0;
     const int kBatteryAdcInterval = 5;
-    const int kBatteryAdcDataCount = 3;
-    const int kLowBatteryLevel = 20;
+    const int kBatteryAdcDataCount = 5;
+    const int kLowBatteryLevel = 10;
+    const int kWarnBatteryLevel30 = 30;
+    const int kWarnBatteryLevel20 = 20;
     const int kTemperatureReadInterval = 10; // 每 10 秒读取一次温度
 
     adc_oneshot_unit_handle_t adc_handle_;
@@ -38,6 +41,10 @@ private:
         if (new_charging_status != is_charging_) {
             is_charging_ = new_charging_status;
             ESP_LOGI("powermanager","当前充电状态%d",is_charging_);
+            if (is_charging_) {
+                warned_30_percent_ = false;
+                warned_20_percent_ = false;
+            }
             if (on_charging_status_changed_) {
                 on_charging_status_changed_(is_charging_);
             }
@@ -69,7 +76,7 @@ private:
         ESP_ERROR_CHECK(adc_oneshot_read(adc_handle_, ADC_CHANNEL_4, &adc_value));
        
         
-        // 将 ADC 值添加到队列中
+        // 将 ADC 值添加到队列中，使用连续三次的AD值求均值
         adc_values_.push_back(adc_value);
         if (adc_values_.size() > kBatteryAdcDataCount) {
             adc_values_.erase(adc_values_.begin());
@@ -79,6 +86,7 @@ private:
             average_adc += (value + 80);
         }
         average_adc /= adc_values_.size();
+        ESP_LOGI("Power_manager","battery ad:%ld",average_adc);
 
        
         // 定义电池电量区间
@@ -86,42 +94,89 @@ private:
             uint16_t adc;
             uint8_t level;
         } levels[] = {
-            {2030, 0},
-            {2134, 20},
-            {2252, 40},
-            {2370, 60},
-            {2488, 80},
-            {2606, 100}
+            {1951, 0},
+            {1964, 5},
+            {2011, 10},
+            {2030, 15},
+            {2064, 20},
+            {2100, 25},
+            {2133, 30},
+            {2155, 40},
+            {2230, 50},
+            {2302, 60},
+            {2368, 70},
+            {2400, 80},
+            {2534, 90},
+            {2584, 100}
         };
         // 低于最低值时
         if (average_adc < levels[0].adc) {
             battery_level_ = 0;
         }
         // 高于最高值时
-        else if (average_adc >= levels[5].adc) {
+        else if (average_adc >= levels[13].adc) {
             battery_level_ = 100;
         } else {
             // 线性插值计算中间值
-            for (int i = 0; i < 5; i++) {
+            for (int i = 0; i < 13; i++) {
                 if (average_adc >= levels[i].adc && average_adc < levels[i+1].adc) {
                     float ratio = static_cast<float>(average_adc - levels[i].adc) / (levels[i+1].adc - levels[i].adc);
                     battery_level_ = levels[i].level + ratio * (levels[i+1].level - levels[i].level);
                     break;
                 }
             }
+            
         }
-        // 检查是否达到低电量阈值
-        if (adc_values_.size() >= kBatteryAdcDataCount) {
-            bool new_low_battery_status = battery_level_ <= kLowBatteryLevel;
-            if (new_low_battery_status != is_low_battery_) {
-                is_low_battery_ = new_low_battery_status;
-                if (on_low_battery_status_changed_) {
-                    on_low_battery_status_changed_(is_low_battery_);
-                }
-            }
+        ESP_LOGI("PowerManager", "ADC value: %d average: %ld level: %ld", adc_value, average_adc, battery_level_);
+
+        UpdateBatteryWarningState();
+        UpdateLowBatteryState();
+    }
+
+    void UpdateBatteryWarningState() {
+        if (adc_values_.size() < kBatteryAdcDataCount) {
+            return;
+        }
+        if (is_charging_) {
+            return;
         }
 
-        ESP_LOGI("PowerManager", "ADC value: %d average: %ld level: %ld", adc_value, average_adc, battery_level_);
+        if (battery_level_ > kWarnBatteryLevel30) {
+            warned_30_percent_ = false;
+            warned_20_percent_ = false;
+            return;
+        }
+
+        if (battery_level_ <= kWarnBatteryLevel30 && battery_level_ > kWarnBatteryLevel20 && !warned_30_percent_) {
+            ESP_LOGI("bat","30！");
+            warned_30_percent_ = true;
+            if (on_battery_warning_level_changed_) {
+                on_battery_warning_level_changed_(kWarnBatteryLevel30);
+            }
+            return;
+        }
+
+        if (battery_level_ <= kWarnBatteryLevel20 && battery_level_ > kLowBatteryLevel && !warned_20_percent_) {
+            ESP_LOGI("bat","20！");
+            warned_20_percent_ = true;
+            if (on_battery_warning_level_changed_) {
+                on_battery_warning_level_changed_(kWarnBatteryLevel20);
+            }
+        }
+    }
+
+    void UpdateLowBatteryState() {
+        if (adc_values_.size() < kBatteryAdcDataCount) {
+            return;
+        }
+        bool should_low = (battery_level_ <= kLowBatteryLevel) && !is_charging_;
+        if (should_low == is_low_battery_) {
+            return;
+        }
+        is_low_battery_ = should_low;
+        if (on_low_battery_status_changed_) {
+            on_low_battery_status_changed_(is_low_battery_);
+        }
     }
 
     void ReadTemperature() {
@@ -162,7 +217,7 @@ public:
             .skip_unhandled_events = true,
         };
         ESP_ERROR_CHECK(esp_timer_create(&timer_args, &timer_handle_));
-        ESP_ERROR_CHECK(esp_timer_start_periodic(timer_handle_, 1000000));
+        ESP_ERROR_CHECK(esp_timer_start_periodic(timer_handle_, 4000*1000));
 
         // 初始化 ADC
         adc_oneshot_unit_init_cfg_t init_config = {
@@ -231,6 +286,10 @@ public:
 
     void OnLowBatteryStatusChanged(std::function<void(bool)> callback) {
         on_low_battery_status_changed_ = callback;
+    }
+
+    void OnBatteryWarningLevelChanged(std::function<void(uint8_t)> callback) {
+        on_battery_warning_level_changed_ = callback;
     }
 
     void OnChargingStatusChanged(std::function<void(bool)> callback) {

@@ -11,7 +11,7 @@ protected:
     void WaitForNetworkReady();
 
 public:
-    Ml307Board(gpio_num_t tx_pin, gpio_num_t rx_pin, size_t rx_buffer_size = 4096);
+    Ml307Board(gpio_num_t tx_pin, gpio_num_t rx_pin, size_t rx_buffer_size = 8192);
     virtual std::string GetBoardType() override;
     virtual void StartNetwork() override;
     virtual Http* CreateHttp() override;

@@ -243,3 +243,9 @@ ESP定时器使用`ESP_TIMER_TASK`分发方式，会在ESP-IDF的定时器任务
 5. **任务栈大小**: 根据功能需求分配，最大的是`encode_detect_packets`（32KB）
 
 
+
+
+
+
+
+

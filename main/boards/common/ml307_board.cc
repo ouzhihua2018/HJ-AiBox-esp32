@@ -199,6 +199,14 @@ std::string Ml307Board::GetDeviceStatusJson() {
     }
     cJSON_AddItemToObject(root, "network", network);
 
+    // Motor
+    int current_speed;
+    if(board.GetMotorSpeed(current_speed)){
+        cJSON* motor = cJSON_CreateObject();
+        cJSON_AddNumberToObject(motor, "speed", current_speed);
+        cJSON_AddItemToObject(root, "motor", motor);
+    }
+
     auto json_str = cJSON_PrintUnformatted(root);
     std::string json(json_str);
     cJSON_free(json_str);

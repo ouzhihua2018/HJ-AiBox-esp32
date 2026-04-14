@@ -53,7 +53,7 @@ bool MqttProtocol::StartMqttClient(bool report_error) {
     }
 
     mqtt_ = Board::GetInstance().CreateMqtt();
-    mqtt_->SetKeepAlive(90);
+    mqtt_->SetKeepAlive(300);
 
     mqtt_->OnDisconnected([this]() {
         ESP_LOGI(TAG, "Disconnected from endpoint");
@@ -61,6 +61,7 @@ bool MqttProtocol::StartMqttClient(bool report_error) {
 
     mqtt_->OnMessage([this](const std::string& topic, const std::string& payload) {
         cJSON* root = cJSON_Parse(payload.c_str());
+        ESP_LOGW(TAG, "MQTT recv msg: topic=%s, payload=%s", topic.c_str(), payload.c_str());
         if (root == nullptr) {
             ESP_LOGE(TAG, "Failed to parse json message %s", payload.c_str());
             return;
@@ -239,7 +240,7 @@ bool MqttProtocol::OpenAudioChannel() {
     }
 
     // 等待服务器响应
-    EventBits_t bits = xEventGroupWaitBits(event_group_handle_, MQTT_PROTOCOL_SERVER_HELLO_EVENT, pdTRUE, pdFALSE, pdMS_TO_TICKS(30000));
+    EventBits_t bits = xEventGroupWaitBits(event_group_handle_, MQTT_PROTOCOL_SERVER_HELLO_EVENT, pdTRUE, pdFALSE, pdMS_TO_TICKS(300000));
     if (!(bits & MQTT_PROTOCOL_SERVER_HELLO_EVENT)) {
         ESP_LOGE(TAG, "Failed to receive server hello");
         SetError(Lang::Strings::SERVER_TIMEOUT);

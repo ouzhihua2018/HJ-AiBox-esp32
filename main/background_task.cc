@@ -50,14 +50,16 @@ void BackgroundTask::WaitForCompletion() {
 void BackgroundTask::BackgroundTaskLoop() {
     ESP_LOGI(TAG, "background_task started");
     while (true) {
+        //ESP_LOGI(TAG,"背景任务正在执行");
         std::unique_lock<std::mutex> lock(mutex_);
         condition_variable_.wait(lock, [this]() { return !main_tasks_.empty(); });
-        
+        //ESP_LOGI(TAG,"背景任务正在执行，已获取锁");
         std::list<std::function<void()>> tasks = std::move(main_tasks_);
         lock.unlock();
 
         for (auto& task : tasks) {
             task();
+           
         }
     }
 }

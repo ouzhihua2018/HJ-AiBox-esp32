@@ -25,6 +25,8 @@
 #include "motor.h"
 #define TAG "TDi-300-PH-MainBoard"
 
+uint8_t uid[RC522_PICC_UID_SIZE_MAX] = {0};
+
 static void on_picc_state_changed(void *arg, esp_event_base_t base, int32_t event_id, void *data)
 {
     rc522_picc_state_changed_event_t *event = (rc522_picc_state_changed_event_t *)data;
@@ -33,9 +35,15 @@ static void on_picc_state_changed(void *arg, esp_event_base_t base, int32_t even
 
     if (picc->state == RC522_PICC_STATE_ACTIVE)
     {
-        rc522_picc_print(picc);
-        app.ResetDecoder();
-        app.PlaySound(Lang::Sounds::P3_POPUP);
+        for(int i=0;i<RC522_PICC_UID_SIZE_MAX;i++){
+            if(!(picc->uid.value[i] == uid[i])&&(app.GetDeviceState()==kDeviceStateIdle)){
+                ESP_LOGI(TAG,"RFID 已识别");
+                memcpy(uid,picc->uid.value,RC522_PICC_UID_SIZE_MAX);
+                app.CharacterSwitch(uid, RC522_PICC_UID_SIZE_MAX);
+                app.ResetDecoder();
+                app.PlaySound(Lang::Sounds::P3_POPUP);
+            }
+        }
     }
     else if (picc->state == RC522_PICC_STATE_IDLE && event->old_state >= RC522_PICC_STATE_ACTIVE)
     {
@@ -49,11 +57,7 @@ static rc522_handle_t scanner;
 class TDi_300_PH : public DualNetworkBoard
 {
 private:
-    esp_timer_handle_t angle_read_timer_handle_;
-    int adc_raw_value_;
-    adc_oneshot_unit_handle_t adc1_handle_;
-    bool adc_initialized_;
-    bool auto_motor_control_;
+
     Button boot_button_;
     Button volume_up_button_;
     Button volume_down_button_;
@@ -62,8 +66,8 @@ private:
     i2c_master_bus_handle_t i2c_bus_;
     i2c_master_dev_handle_t pca9557_handle_;
     motor motor_;
-   
-    esp_timer_handle_t* out_handle;
+    float target_angle_;
+    
     void InitializeI2c()
     {
         // Initialize I2C peripheral
@@ -97,6 +101,29 @@ private:
             } else {
                 power_save_timer_->SetEnabled(true);
             } });
+        power_manager_->OnLowBatteryStatusChanged([](bool low_battery) {
+            auto& app = Application::GetInstance();
+            if (low_battery) {
+                app.RequestLowBatteryHalt();
+            } else {
+                app.ClearLowBatteryHalt();
+            }
+        });
+        power_manager_->OnBatteryWarningLevelChanged([](uint8_t level) {
+            auto& app = Application::GetInstance();
+            app.Schedule([level, &app]() {
+                if (app.GetDeviceState() == kDeviceStateLowBattery) {
+                    return;
+                }
+                // 30% / 20% 仅提醒，不打断当前会话流程
+                if (app.GetDeviceState() == kDeviceStateIdle) {
+                    app.ResetDecoder();
+                    app.PlaySound(Lang::Sounds::P3_BATTERYLOW);
+                } else {
+                    ESP_LOGI(TAG, "Battery warning at %u%%, skip voice reminder in busy state", level);
+                }
+            });
+        });
     }
 
     void InitializePowerSaveTimer()
@@ -120,127 +147,6 @@ private:
                                                // GetBacklight()->RestoreBrightness();
                                            });
         power_save_timer_->SetEnabled(true);
-    }
-
-    // 延迟初始化ADC，避免在LEDC初始化之前影响RTC时钟
-    void LazyInitializeAdc()
-    {
-        if (adc_initialized_)
-        {
-            ESP_LOGI(TAG, "ADC已经初始化，跳过重复初始化");
-            return;
-        }
-
-        ESP_LOGI(TAG, "开始初始化ADC1 (GPIO4 -> ADC1_CHANNEL_3)...");
-
-        // 获取ADC1单元实例
-        //  注意：使用RC_FAST时钟源可能会影响RTC时钟，因此必须在LEDC初始化之后调用
-        adc_oneshot_unit_init_cfg_t init_config1;
-        init_config1.clk_src = ADC_RTC_CLK_SRC_RC_FAST;
-        init_config1.unit_id = ADC_UNIT_1;
-        init_config1.ulp_mode = ADC_ULP_MODE_DISABLE;
-
-        esp_err_t ret = adc_oneshot_new_unit(&init_config1, &adc1_handle_);
-        if (ret != ESP_OK)
-        {
-            ESP_LOGE(TAG, "ADC1单元创建失败：%s (0x%x)", esp_err_to_name(ret), ret);
-            return;
-        }
-        ESP_LOGI(TAG, "ADC1单元创建成功");
-
-        // 配置ADC1通道 - GPIO4对应ADC1_CHANNEL_3 (用于电位器角度检测)
-        adc_oneshot_chan_cfg_t adc1_config;
-        adc1_config.bitwidth = ADC_BITWIDTH_DEFAULT;
-        adc1_config.atten = ADC_ATTEN_DB_12; // 12dB衰减，支持0-3.3V输入
-
-        ret = adc_oneshot_config_channel(adc1_handle_, ADC_CHANNEL_3, &adc1_config);
-        if (ret != ESP_OK)
-        {
-            ESP_LOGE(TAG, "ADC1通道配置失败：%s (0x%x)", esp_err_to_name(ret), ret);
-            adc_oneshot_del_unit(adc1_handle_);
-            return;
-        }
-
-        adc_initialized_ = true;
-        ESP_LOGI(TAG, "ADC1初始化成功 - GPIO4 -> ADC1_CHANNEL_3，用于电位器角度检测");
-    }
-
-    void InitializeAngleDetect()
-    {
-
-        adc_oneshot_unit_init_cfg_t init_config1;
-        init_config1.clk_src = ADC_RTC_CLK_SRC_RC_FAST;
-        init_config1.unit_id = ADC_UNIT_1;
-        init_config1.ulp_mode = ADC_ULP_MODE_DISABLE;
-
-        esp_err_t ret = adc_oneshot_new_unit(&init_config1, &adc1_handle_);
-        if (ret != ESP_OK)
-        {
-            ESP_LOGE(TAG, "ADC1单元创建失败：%s (0x%x)", esp_err_to_name(ret), ret);
-            return;
-        }
-        ESP_LOGI(TAG, "ADC1单元创建成功");
-
-        // 配置ADC1通道 - GPIO4对应ADC1_CHANNEL_3 (用于电位器角度检测)
-        adc_oneshot_chan_cfg_t adc1_config;
-        adc1_config.bitwidth = ADC_BITWIDTH_DEFAULT;
-        adc1_config.atten = ADC_ATTEN_DB_12; // 12dB衰减，支持0-3.3V输入
-
-        ret = adc_oneshot_config_channel(adc1_handle_, ADC_CHANNEL_3, &adc1_config);
-        if (ret != ESP_OK)
-        {
-            ESP_LOGE(TAG, "ADC1通道配置失败：%s (0x%x)", esp_err_to_name(ret), ret);
-            adc_oneshot_del_unit(adc1_handle_);
-            return;
-        }
-        // 初始化角度传感定时器
-        esp_timer_create_args_t angle_timer_args = {
-            .callback = [](void *arg)
-            {
-                TDi_300_PH *this_ = (TDi_300_PH *)arg;
-                if (this_->adc_initialized_)
-                {
-                    // 读取GPIO4上的电位器ADC值 (ADC1_CHANNEL_3)
-                    esp_err_t ret = adc_oneshot_read(this_->adc1_handle_, ADC_CHANNEL_3, &(this_->adc_raw_value_));
-                    if (ret != ESP_OK)
-                    {
-                        ESP_LOGE(TAG, "ADC读取失败：%s", esp_err_to_name(ret));
-                        return;
-                    }
-                    // 定期输出ADC值用于调试（每10次输出一次，避免日志过多）
-                    static int log_counter = 0;
-                    if (++log_counter >= 10)
-                    {
-                        ESP_LOGI(TAG, "电位器ADC值: %d (范围: 0-4095)", this_->adc_raw_value_);
-                        log_counter = 0;
-                    }
-                }
-                else
-                {
-                    ESP_LOGW(TAG, "ADC未初始化，无法读取电位器值");
-                }
-            },
-            .arg = this,
-            .dispatch_method = ESP_TIMER_TASK,
-            .name = "angle_timer",
-            .skip_unhandled_events = true};
-
-        esp_err_t ret = esp_timer_create(&angle_timer_args, &angle_read_timer_handle_);
-        if (ret != ESP_OK)
-        {
-            ESP_LOGE(TAG, "ADC定时器创建失败：%s (0x%x)", esp_err_to_name(ret), ret);
-            return;
-        }
-
-        ret = esp_timer_start_periodic(angle_read_timer_handle_, 100 * 1000); // 每100ms读取一次
-        if (ret != ESP_OK)
-        {
-            ESP_LOGE(TAG, "ADC定时器启动失败：%s (0x%x)", esp_err_to_name(ret), ret);
-            esp_timer_delete(angle_read_timer_handle_);
-            return;
-        }
-
-        ESP_LOGI(TAG, "ADC角度检测定时器启动成功 (100ms间隔)");
     }
 
     void InitializeRc522()
@@ -267,7 +173,7 @@ private:
 
         rc522_create(&scanner_config, &scanner);
         rc522_register_events(scanner, RC522_EVENT_PICC_STATE_CHANGED, on_picc_state_changed, NULL);
-        rc522_start(scanner);
+        //rc522_start(scanner);
     }
     void InitializeButtons()
     {
@@ -275,22 +181,23 @@ private:
                              {
             //power_save_timer_->WakeUp();
             auto& app = Application::GetInstance();
+            ESP_LOGE(TAG,"BOOT BUTTON");
             app.ToggleChatState(); });
 
-        boot_button_.OnLongPress([this]()
-                                 {
-                                     auto &app = Application::GetInstance();
-                                     ESP_LOGI(TAG, "BOOT TRIGGER");
-                                     SwitchNetworkType();
-                                     // ESP_LOGI(TAG,"当前LEVLE:%d",gpio_get_level(MOTOR_PWM_GPIO));
-                                     // app.EmergencyWake();
-                                 });
-        boot_button_.OnMultipleClick([this]()
-                                     {
-            if (GetNetworkType() == NetworkType::WIFI) {
-                auto& wifi_board = static_cast<WifiBoard&>(GetCurrentBoard());
-                wifi_board.ResetWifiConfiguration();
-            } }, 3);
+        // boot_button_.OnLongPress([this]()
+        //                          {
+        //                              auto &app = Application::GetInstance();
+        //                              ESP_LOGI(TAG, "BOOT TRIGGER");
+        //                              SwitchNetworkType();
+        //                              // ESP_LOGI(TAG,"当前LEVLE:%d",gpio_get_level(MOTOR_PWM_GPIO));
+        //                              // app.EmergencyWake();
+        //                          });
+        // boot_button_.OnMultipleClick([this]()
+        //                              {
+        //     if (GetNetworkType() == NetworkType::WIFI) {
+        //         auto& wifi_board = static_cast<WifiBoard&>(GetCurrentBoard());
+        //         wifi_board.ResetWifiConfiguration();
+        //     } }, 3);
         volume_up_button_.OnClick([this]()
                                   {
                                       //power_save_timer_->WakeUp();
@@ -372,20 +279,32 @@ public:
                    volume_down_button_(VOLUME_DOWN_BUTTON_GPIO)
     {
         InitializePowerManager();
+        
         InitializePowerSaveTimer();
         InitializeI2c();
-        motor_.InitMotor(MOTOR_PWM_GPIO);
+        motor_.InitMotor(MOTOR_PWM_GPIO,MOTOR_PWM2_GPIO);
 
         // InitializeSpi();
 
         InitializeButtons();
         //motor_.motor_test();
         vTaskDelay(pdMS_TO_TICKS(50));
-        InitializeAngleDetect();
+        //InitializeAngleDetect();
         InitializeRc522();
         
     }
-
+    virtual void StartRfidScan() override
+    {
+        rc522_start(scanner);
+    }
+    virtual void StopRfidScan() override
+    {
+        rc522_pause(scanner);
+    }
+    virtual void StopMotorWork() override
+    {
+        motor_.SetSpeedLevel(0);
+    }
     virtual Led *GetLed() override
     {
         static CircularStrip led(BUILTIN_LED_GPIO, 2);
@@ -412,7 +331,10 @@ public:
                                          AUDIO_INPUT_REFERENCE);
         return &audio_codec;
     }
-
+    virtual bool GetMotorSpeed(int &current_speed) override {
+        current_speed = motor_.GetSpeed();
+        return true;
+    }
     virtual bool GetBatteryLevel(int &level, bool &charging, bool &discharging) override
     {
         static bool last_discharging = false;
@@ -423,7 +345,7 @@ public:
             power_save_timer_->SetEnabled(discharging);
             last_discharging = discharging;
         }
-        level = std::max<uint32_t>(power_manager_->GetBatteryLevel(), 20);
+        level = power_manager_->GetBatteryLevel();
         return true;
     }
 
@@ -441,6 +363,7 @@ public:
         }
         DualNetworkBoard::SetPowerSaveMode(enabled);
     }
+    
 };
-
+   
 DECLARE_BOARD(TDi_300_PH);

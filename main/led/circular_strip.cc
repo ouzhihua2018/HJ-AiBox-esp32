@@ -243,6 +243,11 @@ void CircularStrip::OnStateChanged() {
             Blink(color, 500);
             break;
         }
+        case kDeviceStateLowBattery: {
+            StripColor color = { default_brightness_, low_brightness_, low_brightness_ };
+            Blink(color, 800);
+            break;
+        }
         default:
             ESP_LOGW(TAG, "Unknown led strip event: %d", device_state);
             return;

@@ -1,6 +1,6 @@
 #include "afe_audio_processor.h"
 #include <esp_log.h>
-#include "application.h""
+#include "application.h"
 #define PROCESSOR_RUNNING 0x01
 
 #define TAG "AfeAudioProcessor"
@@ -120,13 +120,15 @@ void AfeAudioProcessor::AudioProcessorTask() {
             }
             continue;
         }
-
+        //ESP_LOGI(TAG,"AFE已Fetch");
         // VAD state change
         if (vad_state_change_callback_) {
             if (res->vad_state == VAD_SPEECH && !is_speaking_) {
+                ESP_LOGI(TAG,"AFE已检测到人声");
                 is_speaking_ = true;
                 vad_state_change_callback_(true);
             } else if (res->vad_state == VAD_SILENCE && is_speaking_) {
+                ESP_LOGI(TAG,"AFE没有检测到人声");
                 is_speaking_ = false;
                 vad_state_change_callback_(false);
             }

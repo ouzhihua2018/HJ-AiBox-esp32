@@ -10,7 +10,7 @@
 #include "led/led.h"
 #include "backlight.h"
 #include "camera.h"
-
+#include "motor.h"
 void* create_board();
 class AudioCodec;
 class Display;
@@ -31,7 +31,9 @@ public:
         static Board* instance = static_cast<Board*>(create_board());
         return *instance;
     }
-
+    virtual void StartRfidScan() {};
+    virtual void StopRfidScan() {};
+    virtual void StopMotorWork() {};
     virtual ~Board() = default;
     virtual std::string GetBoardType() = 0;
     virtual std::string GetUuid() { return uuid_; }
@@ -50,6 +52,7 @@ public:
     virtual void StartNetwork() = 0;
     virtual const char* GetNetworkStateIcon() = 0;
     virtual bool GetBatteryLevel(int &level, bool& charging, bool& discharging);
+    virtual bool GetMotorSpeed(int &current_speed);
     virtual std::string GetJson();
     virtual void SetPowerSaveMode(bool enabled) = 0;
     virtual std::string GetBoardJson() = 0;

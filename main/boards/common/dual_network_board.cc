@@ -14,8 +14,8 @@ DualNetworkBoard::DualNetworkBoard(gpio_num_t ml307_tx_pin, gpio_num_t ml307_rx_
       ml307_rx_buffer_size_(ml307_rx_buffer_size) {
     
     // 从Settings加载网络类型
-    network_type_ = LoadNetworkTypeFromSettings(default_net_type);
-
+    //network_type_ = LoadNetworkTypeFromSettings(default_net_type);
+    network_type_ = NetworkType::WIFI;
     // 只初始化当前网络类型对应的板卡
     InitializeCurrentBoard();
 }

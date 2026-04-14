@@ -264,6 +264,14 @@ std::string WifiBoard::GetDeviceStatusJson() {
     }
     cJSON_AddItemToObject(root, "network", network);
 
+    // Motor
+    int current_speed;
+    if(board.GetMotorSpeed(current_speed)){
+        cJSON* motor = cJSON_CreateObject();
+        cJSON_AddNumberToObject(motor, "speed", current_speed);
+        cJSON_AddItemToObject(root, "motor", motor);
+    }
+    
     // Chip
     float esp32temp = 0.0f;
     if (board.GetTemperature(esp32temp)) {

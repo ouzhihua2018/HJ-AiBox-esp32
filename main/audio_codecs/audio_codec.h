@@ -40,7 +40,8 @@ public:
 protected:
     i2s_chan_handle_t tx_handle_ = nullptr;
     i2s_chan_handle_t rx_handle_ = nullptr;
-    std::mutex audio_mutex_;
+    std::mutex audio_input_mutex_;
+    std::mutex audio_output_mutex_;
     bool duplex_ = false;
     bool input_reference_ = false;
     bool input_enabled_ = false;

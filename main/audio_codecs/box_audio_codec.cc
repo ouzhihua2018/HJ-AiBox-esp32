@@ -14,7 +14,7 @@ BoxAudioCodec::BoxAudioCodec(void* i2c_master_handle, int input_sample_rate, int
     input_channels_ = input_reference_ ? 2 : 1; // 输入通道数
     input_sample_rate_ = input_sample_rate;
     output_sample_rate_ = output_sample_rate;
-    input_gain_ = 10000;
+    input_gain_ = 60; 
 
     CreateDuplexChannels(mclk, bclk, ws, dout, din);
 
@@ -197,8 +197,8 @@ void BoxAudioCodec::EnableInput(bool enable) {
             .channel_mask = ESP_CODEC_DEV_MAKE_CHANNEL_MASK(0),
             .sample_rate = (uint32_t)output_sample_rate_,
             .mclk_multiple = 0,
-        };
-        if (input_reference_) {
+        };    //  通道2 说话没变化，似乎是有声音时打印 1 3，   通道3 说话没变化，输出声音时也会打印 1 3 ，但是幅值没有2大。 通道 0 正常说话 1 3，有变化，而且播放声音时2也变化。
+        if (input_reference_) {  //通道1时，说话声音没变化，但是播放声音时 4个 数组元素都会变化，但幅值较小。 
             fs.channel_mask |= ESP_CODEC_DEV_MAKE_CHANNEL_MASK(1);
         }
         ESP_ERROR_CHECK(esp_codec_dev_open(input_dev_, &fs));
@@ -234,7 +234,30 @@ void BoxAudioCodec::EnableOutput(bool enable) {
 int BoxAudioCodec::Read(int16_t* dest, int samples) {
     if (input_enabled_) {
         ESP_ERROR_CHECK_WITHOUT_ABORT(esp_codec_dev_read(input_dev_, (void*)dest, samples * sizeof(int16_t)));
-    } //1 3 2 4
+    } 
+    // // 慢速打印：每300帧输出一次，不刷屏
+    // static int count = 0;
+    // if (++count >= 10) {
+    //     count = 0;
+
+    //     // ✅ 关键：强转成 uint8_t，按字节打印 4 个通道
+    //     uint8_t* bytes = (uint8_t*)dest;
+
+    //     // ESP_LOGI(TAG, "TDM 4通道:  %d  |  %d  |  %d  |  %d",
+    //     //     bytes[0],
+    //     //     bytes[1],
+    //     //     bytes[2],
+    //     //     bytes[3]);
+    //     if (samples >= 4) {  // 确保能读到完整4通道
+    //         ESP_LOGI(TAG, "========================================");
+    //         ESP_LOGI(TAG, "TDM 4通道原始数据 (1帧)：");
+    //         ESP_LOGI(TAG, " %d", dest[0]);
+    //         ESP_LOGI(TAG, " %d", dest[1]);
+    //         ESP_LOGI(TAG, " %d", dest[2]);
+    //         ESP_LOGI(TAG, " %d", dest[3]);
+    //         ESP_LOGI(TAG, "========================================\n");
+    //     }
+    // }
     return samples;
 }
 
