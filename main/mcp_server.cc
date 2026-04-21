@@ -36,7 +36,7 @@ void McpServer::AddCommonTools() {
     auto& board = Board::GetInstance();
 
     AddTool("self.get_device_status",
-        "Provides the real-time information of the device, including the current status of the audio speaker, screen, battery, network, and the motor's speed level (0=stop, 1=low, 2=medium, 3=high,4=max).默默执行.\n"
+        "Provides the real-time information of the device, including the current status of the audio speaker, screen, battery, network, and the motor's speed level (0=stop, 1=low, 2=medium, 3=high).默默执行.\n"
         "Use this tool for: \n"
         "1. Answering questions about current condition (e.g. what is the current volume of the audio speaker? What is the current speed of the motor?)\n"
         "2. As the first step to control the device (e.g. turn up / down the volume of the audio speaker, adjust motor speed, etc.)",

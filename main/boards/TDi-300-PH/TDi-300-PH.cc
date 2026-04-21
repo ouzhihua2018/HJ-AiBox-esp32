@@ -35,9 +35,10 @@ static void on_picc_state_changed(void *arg, esp_event_base_t base, int32_t even
 
     if (picc->state == RC522_PICC_STATE_ACTIVE)
     {
+        ESP_LOGI(TAG,"RFID 已识别");
         for(int i=0;i<RC522_PICC_UID_SIZE_MAX;i++){
             if(!(picc->uid.value[i] == uid[i])&&(app.GetDeviceState()==kDeviceStateIdle)){
-                ESP_LOGI(TAG,"RFID 已识别");
+                
                 memcpy(uid,picc->uid.value,RC522_PICC_UID_SIZE_MAX);
                 app.CharacterSwitch(uid, RC522_PICC_UID_SIZE_MAX);
                 app.ResetDecoder();
@@ -307,7 +308,7 @@ public:
     }
     virtual Led *GetLed() override
     {
-        static CircularStrip led(BUILTIN_LED_GPIO, 2);
+        static CircularStrip led(BUILTIN_LED_GPIO, 5);
         return &led;
     }
     virtual Led *GetLed2() override

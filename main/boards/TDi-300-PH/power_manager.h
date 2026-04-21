@@ -106,19 +106,19 @@ private:
             {2302, 60},
             {2368, 70},
             {2400, 80},
-            {2534, 90},
-            {2584, 100}
+            {2534, 100},
+            
         };
         // 低于最低值时
         if (average_adc < levels[0].adc) {
             battery_level_ = 0;
         }
         // 高于最高值时
-        else if (average_adc >= levels[13].adc) {
+        else if (average_adc >= levels[12].adc) {
             battery_level_ = 100;
         } else {
             // 线性插值计算中间值
-            for (int i = 0; i < 13; i++) {
+            for (int i = 0; i < 12; i++) {
                 if (average_adc >= levels[i].adc && average_adc < levels[i+1].adc) {
                     float ratio = static_cast<float>(average_adc - levels[i].adc) / (levels[i+1].adc - levels[i].adc);
                     battery_level_ = levels[i].level + ratio * (levels[i+1].level - levels[i].level);

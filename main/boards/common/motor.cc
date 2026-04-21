@@ -5,13 +5,12 @@
 #define SPEED_LOW       1
 #define SPEED_MEDIUM    2
 #define SPEED_HIGH      3
-#define SPEED_MAX       4
 
 #define STALL_CHECK_INTERVAL_MS      2000   //1000ms 监测一次堵转
 #define STALL_ANGLE_THRESHOLD        3.0f
 #define STALL_CONSECUTIVE_TIMES      3
 
-int pwm_array[5] = {0, 5556, 6800, 7655, 8192};
+int pwm_array[5] = {0, 6000, 7055, 8192};
 
 motor::motor()
 {
@@ -78,8 +77,8 @@ void motor::InitMotor(gpio_num_t MOTOR_PWM_GPIO, gpio_num_t MOTOR_PWM2_GPIO)
                        });
 
     mcp_server.AddTool("self.motor.adjust_speed",
-                       "Adjust motor speed 0-4.\n",
-                       PropertyList({Property("speed", kPropertyTypeInteger, 0, 4)}),
+                       "Adjust motor speed 0-3.\n",
+                       PropertyList({Property("speed", kPropertyTypeInteger, 0, 3)}),
                        [this](const PropertyList &properties) -> ReturnValue
                        {
                            SetSpeedLevel(properties["speed"].value<int>());
@@ -198,13 +197,12 @@ int motor::GetSpeed()
     if (current_pwm < pwm_array[1]) return SPEED_STOP;
     if (current_pwm < pwm_array[2]) return SPEED_LOW;
     if (current_pwm < pwm_array[3]) return SPEED_MEDIUM;
-    if (current_pwm < pwm_array[4]) return SPEED_HIGH;
-    return SPEED_MAX;
+    return SPEED_HIGH;
 }
 
 void motor::SetSpeedLevel(int level)
 {
-    if (level < 0 || level > 4) level = SPEED_MEDIUM;
+    if (level < 0 || level > 3) level = SPEED_MEDIUM;
     int target_pwm = pwm_array[level];
 
     if (direction_)
