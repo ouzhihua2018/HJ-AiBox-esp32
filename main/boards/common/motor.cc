@@ -10,7 +10,7 @@
 #define STALL_ANGLE_THRESHOLD        3.0f
 #define STALL_CONSECUTIVE_TIMES      3
 
-int pwm_array[5] = {0, 6000, 7055, 8192};
+int pwm_array[5] = {0, 6300, 7055, 8192};
 
 motor::motor()
 {

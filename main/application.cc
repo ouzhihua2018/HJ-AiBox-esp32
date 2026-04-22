@@ -905,6 +905,7 @@ void Application::OnAudioOutput() {
     std::unique_lock<std::mutex> lock(mutex_);
     //ESP_LOGI(TAG,"AudioOutput锁已获取");
     if (audio_decode_queue_.empty()) {
+        aborted_ = false;
         // Disable the output if there is no audio data for a long time
         if (device_state_ == kDeviceStateIdle || device_state_ == kDeviceStateLowBattery) {
             auto duration = std::chrono::duration_cast<std::chrono::seconds>(now - last_output_time_).count();
