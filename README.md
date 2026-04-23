@@ -1,5 +1,11 @@
-**编译流程**:位于项目CMAKELISTS目录中，Set-target esp32s3，随后idf.py menuconfig选择要变更内容(底座默认不需要任何更改)，随后build编译。由于添加了唤醒词components组件，导致原有的管理组件依赖混乱，每次重新编译需手动在管理组件opus-encoder中添加REQUIRES 78__esp-opus。   
+**编译流程**:位于项目CMAKELISTS目录中，Set-target esp32s3，随后idf.py menuconfig选择要变更内容(底座默认不需要任何更改)，随后build编译。由于添加了唤醒词components组件，导致原有的管理组件依赖混乱，每次重新编译需手动在管理组件opus-encoder中添加REQUIRES 78__esp-opus。    78 ml307_mqtt 手动添加connected_ = true;
+if (type == "conn") {
+                    if (arguments[2].int_value == 0) {
+                        connected_ = true;
+                        xEventGroupSetBits(event_group_handle_, MQTT_CONNECTED_EVENT);
+                    } 
 若4G无法连接鼎乐MQTT，尝试将MQtt.h 中 int keep_alive_seconds_ = 30;改大
+
 **程序框架**:应用层(application.cc)->板级层(board.cc)->底层驱动层(各种组件)。
 
 **逻辑流程**:(括号内表示当前状态)上电后，(开始)首先对板类加载，随后底层Codec初始化,opus编解码器初始化，创建音频采集播放任务audio_loop,开始对底层CODEC的采集和播放。启动系统状态定时器 每秒更新系统状态以及3秒更新系统时间。随后进入网络加载，OTA升级，MCP通用工具添加，实例化通讯协议并注册二进制音频数据和json回调,初始化AFE以及micro唤醒词，至此初始化完毕，进入空闲状态，开启唤醒词监测。主线程则进入*MainEventLoop*来处理音频发送任务和调度器任务。

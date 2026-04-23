@@ -287,9 +287,9 @@ void Application::RequestLowBatteryHalt() {
         if (device_state_ == kDeviceStateSpeaking) {
             AbortSpeaking(kAbortReasonNone);
         }
-        ResetDecoder();
+        
         SetDeviceState(kDeviceStateLowBattery);
-        PlaySound(Lang::Sounds::P3_BATTERYLOW);
+       
     });
 }
 
@@ -744,8 +744,8 @@ void Application::Start() {
                 } else {
                     voice_detected_ = false;
                 }
-                auto led = Board::GetInstance().GetLed();
-                led->OnStateChanged();                     
+                //auto led = Board::GetInstance().GetLed();
+                //led->OnStateChangedLed2();                     
                 auto led2 = Board::GetInstance().GetLed2();
                 led2->OnStateChanged();
             });
@@ -765,7 +765,7 @@ void Application::Start() {
                 if (!protocol_->IsAudioChannelOpened()) {
                     SetDeviceState(kDeviceStateConnecting);
                     if (!protocol_->OpenAudioChannel()) {
-                        micro_wake_word_->StartDetection();
+                        //micro_wake_word_->StartDetection();
                         wake_word_->StartDetection();
                         return;
                     }
@@ -1088,7 +1088,7 @@ void Application::SetDeviceState(DeviceState state) {
     auto& board = Board::GetInstance();
     auto display = board.GetDisplay();
     auto led = board.GetLed();
-    led->OnStateChanged();
+    //led->OnStateChangedLed2();
    
     auto led2 = board.GetLed2();
     led2->OnStateChanged();

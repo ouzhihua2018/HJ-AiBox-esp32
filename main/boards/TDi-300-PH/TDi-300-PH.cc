@@ -117,12 +117,9 @@ private:
                     return;
                 }
                 // 30% / 20% 仅提醒，不打断当前会话流程
-                if (app.GetDeviceState() == kDeviceStateIdle) {
-                    app.ResetDecoder();
-                    app.PlaySound(Lang::Sounds::P3_BATTERYLOW);
-                } else {
-                    ESP_LOGI(TAG, "Battery warning at %u%%, skip voice reminder in busy state", level);
-                }
+                app.ResetDecoder();
+                app.PlaySound(Lang::Sounds::P3_BATTERYLOW);
+                
             });
         });
     }

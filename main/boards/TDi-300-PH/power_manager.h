@@ -170,6 +170,11 @@ private:
             return;
         }
         bool should_low = (battery_level_ <= kLowBatteryLevel) && !is_charging_;
+        auto& app = Application::GetInstance();
+        if (should_low){
+            app.ResetDecoder();
+            app.PlaySound(Lang::Sounds::P3_BATTERYLOW);
+        }
         if (should_low == is_low_battery_) {
             return;
         }

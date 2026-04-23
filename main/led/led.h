@@ -9,13 +9,14 @@ public:
     virtual ~Led() = default;
     // Set the led state based on the device state
     virtual void OnStateChanged() = 0;
-
+    virtual void OnStateChangedLed2() = 0;
     virtual void FlashOnce() {}; //do nothing
 };
 
 class NoLed : public Led {
 public:
-    virtual void OnStateChanged() override {}
+    virtual void OnStateChanged() override {};
+    virtual void OnStateChangedLed2() override {};
 };
 
 #endif // _LED_H_

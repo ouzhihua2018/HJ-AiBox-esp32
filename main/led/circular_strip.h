@@ -17,7 +17,7 @@ class CircularStrip : public Led {
 public:
     CircularStrip(gpio_num_t gpio, uint8_t max_leds);
     virtual ~CircularStrip();
-
+    void OnStateChangedLed2() override;
     void OnStateChanged() override;
     void FlashOnce() override;
     void SetBrightness(uint8_t default_brightness, uint8_t low_brightness);

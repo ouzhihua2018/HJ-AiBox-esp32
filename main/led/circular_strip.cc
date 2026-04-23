@@ -196,7 +196,67 @@ void CircularStrip::SetBrightness(uint8_t default_brightness, uint8_t low_bright
     low_brightness_ = low_brightness;
     OnStateChanged();
 }
-
+void CircularStrip::OnStateChangedLed2() {
+    auto& app = Application::GetInstance();
+    auto device_state = app.GetDeviceState();
+    uint8_t default_brightness = 4;
+    uint8_t low_brightness = 0;
+    switch (device_state) {
+        case kDeviceStateStarting: {
+            StripColor low = { 0, 0, 0 };
+            StripColor high = { default_brightness, low_brightness, low_brightness }; //开始时
+            Scroll(low, high, 1, 100);  //每间隔100ms去对所有灯做处理，每次熄灭一颗等，以实现跑马灯效果
+            ESP_LOGW(TAG, "start scroll");
+            break; 
+        }
+        case kDeviceStateWifiConfiguring: {
+            StripColor color = { default_brightness, low_brightness, low_brightness };
+            ESP_LOGW(TAG, "wifi config,red blink");
+            Blink(color, 500);
+            break;
+        }
+        case kDeviceStateIdle:
+            ESP_LOGW(TAG, "LED FADEOUT");
+            FadeOut(50);
+            break;
+        case kDeviceStateConnecting: {
+            StripColor low = { 0, 0, 0 };
+            StripColor high = { default_brightness, low_brightness, low_brightness }; //开始时
+            Scroll(low, high, 1, 100); 
+            break;
+        }
+        case kDeviceStateListening: {
+            StripColor low = { 0, 0, 0 };
+            StripColor high = { low_brightness , default_brightness, low_brightness }; //开始时
+            Scroll(low, high, 1, 100); 
+            break;
+        }
+        case kDeviceStateSpeaking: {
+            StripColor low = { 0, 0, 0 };
+            StripColor high = { low_brightness, low_brightness, default_brightness }; //开始时
+            Scroll(low, high, 1, 100); 
+            break;
+        }
+        case kDeviceStateUpgrading: {
+            StripColor color = { default_brightness, low_brightness, low_brightness };  //升级时红色闪烁
+            Blink(color, 100);
+            break;
+        }
+        case kDeviceStateActivating: {
+            StripColor color = { default_brightness, low_brightness, low_brightness }; //激活中红色闪烁
+            Blink(color, 500);
+            break;
+        }
+        case kDeviceStateLowBattery: {
+            StripColor color = { default_brightness, low_brightness, low_brightness };
+            Blink(color, 800);
+            break;
+        }
+        default:
+            ESP_LOGW(TAG, "Unknown led strip event: %d", device_state);
+            return;
+    }
+}
 void CircularStrip::OnStateChanged() {
     auto& app = Application::GetInstance();
     auto device_state = app.GetDeviceState();
