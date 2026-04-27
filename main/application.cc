@@ -744,8 +744,8 @@ void Application::Start() {
                 } else {
                     voice_detected_ = false;
                 }
-                //auto led = Board::GetInstance().GetLed();
-                //led->OnStateChangedLed2();                     
+                auto led = Board::GetInstance().GetLed();
+                led->OnStateChanged();                     
                 auto led2 = Board::GetInstance().GetLed2();
                 led2->OnStateChanged();
             });
@@ -1088,7 +1088,7 @@ void Application::SetDeviceState(DeviceState state) {
     auto& board = Board::GetInstance();
     auto display = board.GetDisplay();
     auto led = board.GetLed();
-    //led->OnStateChangedLed2();
+    led->OnStateChanged();
    
     auto led2 = board.GetLed2();
     led2->OnStateChanged();
@@ -1342,7 +1342,15 @@ void Application::CharacterSwitch(uint8_t* uid,size_t size)
     }
     std::string mac_address = SystemInfo::GetMacAddress();
     protocol_->SendRfidMessage(mac_address,uid_s);
-
+}
+void Application::NotifyResetResult(bool result)
+{   
+    if (GetDeviceState() == kDeviceStateLowBattery) {
+        return;
+    }
+   
+    std::string mac_address = SystemInfo::GetMacAddress();
+    protocol_->SendResetResult(mac_address,result );
 }
 bool Application::CanEnterSleepMode() {
     if (device_state_ == kDeviceStateLowBattery) {

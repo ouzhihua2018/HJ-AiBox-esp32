@@ -77,6 +77,7 @@ public:
     virtual void SendMcpMessage(const std::string& message);
     virtual bool SendText(const std::string& text) = 0;
     virtual void SendRfidMessage(std::string mac,std::string uid);
+    virtual void SendResetResult(std::string mac ,bool isReseted);
 protected:
     std::function<void(const cJSON* root)> on_incoming_json_;
     std::function<void(AudioStreamPacket&& packet)> on_incoming_audio_;

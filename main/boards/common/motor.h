@@ -34,6 +34,7 @@ private:
     // void SpeedUp();
     // void SlowDown();
     // void SetPwm(int pwm);
+    std::function<void(bool)> on_reset_callback_;
 public:
     motor();
     ~motor();
@@ -41,6 +42,7 @@ public:
     void SetSpeedLevel(int level);
     void motor_test();
     int GetSpeed();
+    void OnResetCallback(std::function <void(bool)> callback) {on_reset_callback_ = callback;};
 };
 
 

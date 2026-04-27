@@ -59,7 +59,8 @@ void motor::InitMotor(gpio_num_t MOTOR_PWM_GPIO, gpio_num_t MOTOR_PWM2_GPIO)
 
     mcp_server.AddTool("self.motor.start",
                        "Start the motor at medium speed (speed level 2).\n"
-                       "MANDATORY RULE: MUST call `self.get_device_status` first.\n",
+                       "MANDATORY RULE: MUST call `self.get_device_status` first.\n"
+                       "Only return the final result. Do NOT explain the process.",
                        PropertyList(),
                        [this](const PropertyList &properties) -> ReturnValue
                        {
@@ -77,7 +78,8 @@ void motor::InitMotor(gpio_num_t MOTOR_PWM_GPIO, gpio_num_t MOTOR_PWM2_GPIO)
                        });
 
     mcp_server.AddTool("self.motor.adjust_speed",
-                       "Adjust motor speed 0-3.\n",
+                       "Adjust motor speed 0-3.\n"
+                       "Only return the final result. Do NOT explain the process.",
                        PropertyList({Property("speed", kPropertyTypeInteger, 0, 3)}),
                        [this](const PropertyList &properties) -> ReturnValue
                        {
@@ -87,12 +89,13 @@ void motor::InitMotor(gpio_num_t MOTOR_PWM_GPIO, gpio_num_t MOTOR_PWM2_GPIO)
 
     // ===================== 【复位：已修复】 =====================
     mcp_server.AddTool("self.motor.reset",
-                       "Reset to 0 degrees.\n",
+                       "Start moving the motor to the reset position.\n"
+                       "This is an asynchronous operation.",
                        PropertyList(),
                        [this](const PropertyList &properties) -> ReturnValue
                        {
                            target_angle_ = 0.0f;
-
+                           
                            int adc_val;
                            adc_oneshot_read(adc1_handle_, ADC_CHANNEL_3, &adc_val);
                            float current_angle = AdcToAngle(adc_val);
@@ -101,6 +104,9 @@ void motor::InitMotor(gpio_num_t MOTOR_PWM_GPIO, gpio_num_t MOTOR_PWM2_GPIO)
                            {
                                ESP_LOGI(TAG, "Already in reset position, no action.");
                                SetSpeedLevel(SPEED_STOP);
+                               if(on_reset_callback_){
+                                    on_reset_callback_(true);
+                               }
                                target_angle_ = -1.0f;
                                return true;
                            }
@@ -112,7 +118,8 @@ void motor::InitMotor(gpio_num_t MOTOR_PWM_GPIO, gpio_num_t MOTOR_PWM2_GPIO)
                        });
 
     mcp_server.AddTool("self.motor.reverse",
-                       "Reverse motor direction.\n",
+                       "Reverse motor direction.\n"
+                       "Only return the final result. Do NOT explain the process.",
                        PropertyList(),
                        [this](const PropertyList &properties) -> ReturnValue
                        {
@@ -174,6 +181,9 @@ void motor::InitAngleDetecter()
                 this_->SetSpeedLevel(SPEED_STOP);
                 ESP_LOGI(TAG, "Reached target angle: %.1f, current: %.1f", this_->target_angle_, current_angle);
                 esp_timer_stop(this_->angle_read_timer_handle_);
+                if(this_->on_reset_callback_){
+                    this_->on_reset_callback_(true);
+               }
                 this_->target_angle_ = -1.0f;
             }
         },

@@ -79,6 +79,7 @@ public:
     void WakeWordInvoke(const std::string& wake_word);
     void EmergencyWake();
     void CharacterSwitch(uint8_t* uid,size_t size);
+    void NotifyResetResult(bool result);
     void PlaySound(const std::string_view& sound);
     /** 在主循环中：关会话、播低电提示音并进入 kDeviceStateLowBattery（勿在定时器回调里直接调 Application 其它接口）。 */
     void RequestLowBatteryHalt();

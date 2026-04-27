@@ -281,7 +281,10 @@ public:
         InitializePowerSaveTimer();
         InitializeI2c();
         motor_.InitMotor(MOTOR_PWM_GPIO,MOTOR_PWM2_GPIO);
-
+        motor_.OnResetCallback([&](bool result){
+            auto& app = Application::GetInstance();
+            app.NotifyResetResult(result);
+        });
         // InitializeSpi();
 
         InitializeButtons();

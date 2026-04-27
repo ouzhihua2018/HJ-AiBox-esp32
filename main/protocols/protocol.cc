@@ -59,12 +59,17 @@ void Protocol::SendEmergencyMessage(const int64_t &timestamp, std::string mac)
 void Protocol::SendRfidMessage(std::string mac ,std::string uid)
 {   
     char json[512];
-    snprintf(json,sizeof(json), "{\"session_id\":\"%s\",""\"type\":\"rfid\",\"state\":\"character switch\",\"uuid\":\"%s\", \"device_mac\":\"%s\"}",
+    snprintf(json,sizeof(json), "{\"session_id\":\"%s\",\"type\":\"rfid\",\"state\":\"character switch\",\"uuid\":\"%s\", \"device_mac\":\"%s\"}",
     session_id_.c_str(),uid.c_str(),mac.c_str());
     ESP_LOGI(TAG,"Send Rifd Msg: %s",json);
     SendText(json);
 }
-
+void Protocol::SendResetResult(std::string mac, bool isReseted)
+{   
+    std::string Message = "{\"session_id\":\""+ session_id_ + "\",\"type\":\"reset\",\"result\":\"true\", \"device_mac\":\"" + mac + "\",\"msg\":\"现在设备已经复位到初始位置\"}";
+    ESP_LOGI(TAG,"Send Reset result: %s",Message);
+    SendText(Message);
+}
 void Protocol::SendStartListening(ListeningMode mode) {
     std::string message = "{\"session_id\":\"" + session_id_ + "\"";
     message += ",\"type\":\"listen\",\"state\":\"start\"";
