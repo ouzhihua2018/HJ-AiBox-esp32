@@ -745,7 +745,7 @@ void Application::Start() {
                     voice_detected_ = false;
                 }
                 auto led = Board::GetInstance().GetLed();
-                led->OnStateChanged();                     
+                led->OnStateChangedLed2();                     
                 auto led2 = Board::GetInstance().GetLed2();
                 led2->OnStateChanged();
             });
@@ -1088,7 +1088,7 @@ void Application::SetDeviceState(DeviceState state) {
     auto& board = Board::GetInstance();
     auto display = board.GetDisplay();
     auto led = board.GetLed();
-    led->OnStateChanged();
+    led->OnStateChangedLed2();
    
     auto led2 = board.GetLed2();
     led2->OnStateChanged();

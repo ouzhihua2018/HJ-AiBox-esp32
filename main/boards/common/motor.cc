@@ -90,7 +90,7 @@ void motor::InitMotor(gpio_num_t MOTOR_PWM_GPIO, gpio_num_t MOTOR_PWM2_GPIO)
     // ===================== 【复位：已修复】 =====================
     mcp_server.AddTool("self.motor.reset",
                        "Start moving the motor to the reset position.\n"
-                       "This is an asynchronous operation.",
+                       "你只需要回答电机已开始复位.",
                        PropertyList(),
                        [this](const PropertyList &properties) -> ReturnValue
                        {

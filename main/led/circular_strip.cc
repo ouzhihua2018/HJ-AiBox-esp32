@@ -199,18 +199,14 @@ void CircularStrip::SetBrightness(uint8_t default_brightness, uint8_t low_bright
 void CircularStrip::OnStateChangedLed2() {
     auto& app = Application::GetInstance();
     auto device_state = app.GetDeviceState();
-    uint8_t default_brightness = 4;
-    uint8_t low_brightness = 0;
     switch (device_state) {
         case kDeviceStateStarting: {
-            StripColor low = { 0, 0, 0 };
-            StripColor high = { default_brightness, low_brightness, low_brightness }; //开始时
-            Scroll(low, high, 1, 100);  //每间隔100ms去对所有灯做处理，每次熄灭一颗等，以实现跑马灯效果
-            ESP_LOGW(TAG, "start scroll");
-            break; 
+            StripColor color = { default_brightness_, low_brightness_, low_brightness_ };  //网络连接中 红色
+            SetAllColor(color);
+            break;
         }
         case kDeviceStateWifiConfiguring: {
-            StripColor color = { default_brightness, low_brightness, low_brightness };
+            StripColor color = { default_brightness_, low_brightness_, low_brightness_ };
             ESP_LOGW(TAG, "wifi config,red blink");
             Blink(color, 500);
             break;
@@ -220,35 +216,32 @@ void CircularStrip::OnStateChangedLed2() {
             FadeOut(50);
             break;
         case kDeviceStateConnecting: {
-            StripColor low = { 0, 0, 0 };
-            StripColor high = { default_brightness, low_brightness, low_brightness }; //开始时
-            Scroll(low, high, 1, 100); 
+            StripColor color = { default_brightness_, low_brightness_, low_brightness_ };  //网络连接中 红色
+            SetAllColor(color);
             break;
         }
         case kDeviceStateListening: {
-            StripColor low = { 0, 0, 0 };
-            StripColor high = { low_brightness , default_brightness, low_brightness }; //开始时
-            Scroll(low, high, 1, 100); 
+            StripColor color = { low_brightness_ , default_brightness_, low_brightness_ }; //绿色
+            SetAllColor(color);
             break;
         }
         case kDeviceStateSpeaking: {
-            StripColor low = { 0, 0, 0 };
-            StripColor high = { low_brightness, low_brightness, default_brightness }; //开始时
-            Scroll(low, high, 1, 100); 
+            StripColor color = { low_brightness_, low_brightness_, default_brightness_  }; //蓝色
+            SetAllColor(color);
             break;
         }
         case kDeviceStateUpgrading: {
-            StripColor color = { default_brightness, low_brightness, low_brightness };  //升级时红色闪烁
+            StripColor color = { default_brightness_, low_brightness_, low_brightness_ };  //升级时红色闪烁
             Blink(color, 100);
             break;
         }
         case kDeviceStateActivating: {
-            StripColor color = { default_brightness, low_brightness, low_brightness }; //激活中红色闪烁
+            StripColor color = { default_brightness_, low_brightness_, low_brightness_ }; //激活中红色闪烁
             Blink(color, 500);
             break;
         }
         case kDeviceStateLowBattery: {
-            StripColor color = { default_brightness, low_brightness, low_brightness };
+            StripColor color = { default_brightness_, low_brightness_, low_brightness_ };
             Blink(color, 800);
             break;
         }
