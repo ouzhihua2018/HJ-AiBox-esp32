@@ -47,7 +47,7 @@ list(APPEND SOURCES "audio_processing/afe_audio_processor.cc")
 list(APPEND SOURCES "audio_processing/afe_wake_word.cc")
 list(APPEND SOURCES "audio_processing/micro_wake_word_detect.cc")
 list(APPEND SOURCES "audio_processing/model.cc")
-
+list(APPEND SOURCES "audio_processing/model_xiaolaxiaola.cc")
 # 根据Kconfig选择语言目录
 if(CONFIG_LANGUAGE_ZH_CN)
     set(LANG_DIR "zh-CN")

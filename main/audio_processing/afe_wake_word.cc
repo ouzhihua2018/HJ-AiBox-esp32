@@ -23,6 +23,10 @@ AfeWakeWord::~AfeWakeWord() {
         afe_iface_->destroy(afe_data_);
     }
 
+    if (audio_detection_task_stack_ != nullptr) {
+        heap_caps_free(audio_detection_task_stack_);
+    }
+
     if (wake_word_encode_task_stack_ != nullptr) {
         heap_caps_free(wake_word_encode_task_stack_);
     }
@@ -66,11 +70,22 @@ void AfeWakeWord::Initialize(AudioCodec* codec) {
     afe_iface_ = esp_afe_handle_from_config(afe_config);
     afe_data_ = afe_iface_->create_from_config(afe_config);
 
-    xTaskCreate([](void* arg) {
+    if (audio_detection_task_stack_ == nullptr) {
+        audio_detection_task_stack_ = (StackType_t*)heap_caps_malloc(4096 * sizeof(StackType_t), MALLOC_CAP_SPIRAM);
+    }
+    if (audio_detection_task_stack_ == nullptr) {
+        ESP_LOGE(TAG, "Failed to allocate audio_detection stack in PSRAM");
+        return;
+    }
+
+    audio_detection_task_ = xTaskCreateStatic([](void* arg) {
         auto this_ = (AfeWakeWord*)arg;
         this_->AudioDetectionTask();
         vTaskDelete(NULL);
-    }, "audio_detection", 4096, this, 3, nullptr);
+    }, "audio_detection", 4096, this, 3, audio_detection_task_stack_, &audio_detection_task_buffer_);
+    if (audio_detection_task_ == nullptr) {
+        ESP_LOGE(TAG, "Failed to create audio_detection task");
+    }
 }
 
 void AfeWakeWord::OnWakeWordDetected(std::function<void(const std::string& wake_word)> callback) {
@@ -109,6 +124,8 @@ size_t AfeWakeWord::GetFeedSize() {
 void AfeWakeWord::AudioDetectionTask() {
     auto fetch_size = afe_iface_->get_fetch_chunksize(afe_data_);
     auto feed_size = afe_iface_->get_feed_chunksize(afe_data_);
+    std::vector<int16_t> micro_feed_buffer;
+    micro_feed_buffer.reserve(fetch_size);
     ESP_LOGI(TAG, "Audio detection task started, feed size: %d fetch size: %d",
         feed_size, fetch_size);
     Application& app = Application::GetInstance();
@@ -123,8 +140,9 @@ void AfeWakeWord::AudioDetectionTask() {
         if(app.micro_wake_word_->IsRunning()){ 
            if(app.micro_wake_word_->FreeSize()>16) 
            {   
-                //ESP_LOGI(TAG,"micro freesize:%d",app.micro_wake_word_->FreeSize());
-                app.micro_wake_word_->Feed(std::vector<int16_t>(res->data, res->data + res->data_size/sizeof(int16_t)));  
+                // Avoid repeated temporary allocations in the hot path.
+                micro_feed_buffer.assign(res->data, res->data + res->data_size / sizeof(int16_t));
+                app.micro_wake_word_->Feed(micro_feed_buffer);
            }
         }
         // Store the wake word data for voice recognition, like who is speaking

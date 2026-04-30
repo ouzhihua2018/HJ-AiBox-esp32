@@ -104,9 +104,9 @@ void motor::InitMotor(gpio_num_t MOTOR_PWM_GPIO, gpio_num_t MOTOR_PWM2_GPIO)
                            {
                                ESP_LOGI(TAG, "Already in reset position, no action.");
                                SetSpeedLevel(SPEED_STOP);
-                               if(on_reset_callback_){
-                                    on_reset_callback_(true);
-                               }
+                            //    if(on_reset_callback_){
+                            //         on_reset_callback_(true);
+                            //    }
                                target_angle_ = -1.0f;
                                return true;
                            }
