@@ -1,45 +1,52 @@
 #ifndef MICRO_WAKE_WORD_DETECT_H
 #define MICRO_WAKE_WORD_DETECT_H
-#include <driver/i2s_std.h>
+
+#pragma once
+
 #include <driver/gpio.h>
+#include <driver/i2s_std.h>
+#include <esp_timer.h>
 #include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
 #include <freertos/event_groups.h>
+#include <freertos/task.h>
 #include <functional>
 #include <string>
 #include <vector>
+
 #include "esphome/components/i2s_audio/microphone/i2s_audio_microphone.h"
 #include "esphome/components/micro_wake_word/micro_wake_word.h"
 #include "model.h"
-#include "esp_timer.h"
-#pragma once
-#include "esphome/components/micro_wake_word/micro_wake_word.h"
-#include "freertos/semphr.h"
-// #define DETECT_EVENT_BIT 1
-// #define DETECT_TASK_PRIO 3
-// #define DETECT_TASK_CORE 1
-// #define DETECT_TASK_STACK 4096 * 2 // 模型推理需要大栈，设为8K足够
-// #define DETECT_INTERVAL_MS 4       // 固定4ms检测，匹配模型步长
 
-class MicroWakeWordDetect{
+// 独立任务栈（可放 PSRAM）；推理由 esp_timer 按微秒周期唤醒，避免 FREERTOS_HZ=100 时 vTaskDelay 最小 10ms。
+#define MICRO_WW_TASK_RUNNING_BIT BIT0
+#define MICRO_WW_TASK_STACK_WORDS (4096)
+#define MICRO_WW_TASK_PRIORITY 6
+#define MICRO_WW_TASK_CORE 1
+#define MICRO_WW_LOOP_PERIOD_MS 3
+
+class MicroWakeWordDetect {
 public:
     MicroWakeWordDetect();
-    ~MicroWakeWordDetect(); //gpio_num_t BCLK,gpio_num_t SD,gpio_num_t WS,i2s_port_t port,int sample_rate
+    ~MicroWakeWordDetect();
     void InitializeWakeWordDetect();
-    void OnWakeWordDetected(std::function<void(std::string wake_word)> callback) {callback_=callback;} ;
+    void OnWakeWordDetected(std::function<void(std::string wake_word)> callback) { callback_ = callback; }
     void StartDetection();
-    void Feed(const std::vector<int16_t>& data) ;
+    void Feed(const std::vector<int16_t>& data);
     size_t FreeSize();
     void Stop();
     bool IsRunning();
-    //TaskHandle_t detect_task_handle_ = nullptr;       // 新增：检测任务句柄
-    //EventGroupHandle_t detect_event;
-    esphome::micro_wake_word::MicroWakeWord wakeWord_ ;
+    esphome::micro_wake_word::MicroWakeWord wakeWord_;
+
 private:
+    void DetectionTask();
+    static void PeriodTimerCallback(void* arg);
+
     std::function<void(std::string wake_word)> callback_;
-    bool Detected_;
-    esp_timer_handle_t micro_timer_handle_;
-    //SemaphoreHandle_t mutex_;  // 添加互斥锁保护共享资源
-  
+    EventGroupHandle_t event_group_ = nullptr;
+    TaskHandle_t detect_task_handle_ = nullptr;
+    StaticTask_t detect_task_buffer_;
+    StackType_t* detect_task_stack_ = nullptr;
+    esp_timer_handle_t period_timer_handle_ = nullptr;
 };
+
 #endif

@@ -1,99 +1,153 @@
 #include "micro_wake_word_detect.h"
-#include "esp_log.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/semphr.h"
+
 #include "application.h"
+#include "esp_heap_caps.h"
+#include "esp_log.h"
+
 #define TAG "micro_wake_word_detect"
-MicroWakeWordDetect::MicroWakeWordDetect()
-{
-    // 初始化互斥锁
-  
+
+void MicroWakeWordDetect::PeriodTimerCallback(void* arg) {
+    auto* self = static_cast<MicroWakeWordDetect*>(arg);
+    if (self->detect_task_handle_ != nullptr) {
+        xTaskNotifyGive(self->detect_task_handle_);
+    }
 }
 
-MicroWakeWordDetect::~MicroWakeWordDetect()
-{
-    // 删除互斥锁
-   
+MicroWakeWordDetect::MicroWakeWordDetect() {
+    event_group_ = xEventGroupCreate();
 }
 
-void MicroWakeWordDetect::InitializeWakeWordDetect()
-{
-    const uint8_t *model = stream_state_internal_quant_tflite;
-    const uint8_t *model2 = stream_state_internal_quant_tflite2;
-    // feed一次256个样本 
-    wakeWord_.add_wake_word_model(model, 0.98f,3, "xiaolexiaole", 34000); //22940
-    wakeWord_.add_wake_word_model(model2, 0.98f,3, "xiaolaxiaola", 34000); //22940
-    wakeWord_.set_features_step_size(4);    
+MicroWakeWordDetect::~MicroWakeWordDetect() {
+    if (period_timer_handle_ != nullptr) {
+        esp_timer_stop(period_timer_handle_);
+        esp_timer_delete(period_timer_handle_);
+        period_timer_handle_ = nullptr;
+    }
+    if (detect_task_handle_ != nullptr) {
+        vTaskDelete(detect_task_handle_);
+        detect_task_handle_ = nullptr;
+    }
+    if (detect_task_stack_ != nullptr) {
+        heap_caps_free(detect_task_stack_);
+        detect_task_stack_ = nullptr;
+    }
+    if (event_group_ != nullptr) {
+        vEventGroupDelete(event_group_);
+        event_group_ = nullptr;
+    }
+}
+
+void MicroWakeWordDetect::InitializeWakeWordDetect() {
+    const uint8_t* model = stream_state_internal_quant_tflite;
+    const uint8_t* model2 = stream_state_internal_quant_tflite2;
+    wakeWord_.add_wake_word_model(model, 0.98f, 3, "xiaolexiaole", 34000);
+    wakeWord_.add_wake_word_model(model2, 0.98f, 3, "xiaolaxiaola", 34000);
+    wakeWord_.set_features_step_size(4);
     wakeWord_.add_detection_callback(std::move(callback_));
     wakeWord_.setup();
-    esp_timer_create_args_t clock_timer_args = {
-        .callback = [](void* arg) {
-            MicroWakeWordDetect* this_ = (MicroWakeWordDetect*)arg;
-            // 在定时器回调中也使用互斥锁保护
-            this_->wakeWord_.loop();
-              
-        },
-        .arg = this,
-        .dispatch_method = ESP_TIMER_TASK,
-        .name = "micro_wake_timer",
-        .skip_unhandled_events = true
-    };
-    esp_timer_create(&clock_timer_args, &micro_timer_handle_);
-    ESP_LOGI(TAG,"Initialized");
-}
-//这里我不希望loop空转，因此定时器与wakeWord状态同步
-void MicroWakeWordDetect::StartDetection()
-{   
-    wakeWord_.start();
-    vTaskDelay(pdMS_TO_TICKS(500)); //等待200ms再开启唤醒词定时器
-    Application &app = Application::GetInstance();
-    
-    esp_timer_start_periodic(micro_timer_handle_,1000*3);  //1000*3   
-    
-    // if(kDeviceStateSpeaking == app.GetDeviceState()){
-    //     ESP_LOGI(TAG,"Speaking状态，慢处理唤醒词");
-    //     esp_timer_start_periodic(micro_timer_handle_,1000*60);  //1000*3   
-    // }else{
-    //     esp_timer_start_periodic(micro_timer_handle_,1000*1);  //1000*3   
-    // }
-}
-    
-void MicroWakeWordDetect::Stop()
-{
-    wakeWord_.stop();
-    vTaskDelay(pdMS_TO_TICKS(500)); //等待200ms再开启唤醒词定时器
-    esp_timer_stop(micro_timer_handle_);
-    ESP_LOGW(TAG,"Stop");
-}
 
-// 模拟麦克风手动传音频帧到input_buffer，输入为256个样本   16ms
-void MicroWakeWordDetect::Feed(const std::vector<int16_t> &data)
-{   
-    if (data.empty() || wakeWord_.ring_buffer_ == nullptr) {
+    if (detect_task_stack_ == nullptr) {
+        detect_task_stack_ = (StackType_t*)heap_caps_malloc(
+            MICRO_WW_TASK_STACK_WORDS * sizeof(StackType_t), MALLOC_CAP_SPIRAM);
+    }
+    if (detect_task_stack_ == nullptr) {
+        ESP_LOGE(TAG, "Failed to allocate micro wake task stack in PSRAM");
         return;
     }
 
-    // 在写入数据时使用互斥锁保护
-   
-        wakeWord_.feed(data);
-    
+    detect_task_handle_ = xTaskCreateStaticPinnedToCore(
+        [](void* arg) {
+            auto this_ = (MicroWakeWordDetect*)arg;
+            this_->DetectionTask();
+            vTaskDelete(nullptr);
+        },
+        "micro_wake_task", MICRO_WW_TASK_STACK_WORDS, this, MICRO_WW_TASK_PRIORITY,
+        detect_task_stack_, &detect_task_buffer_, MICRO_WW_TASK_CORE);
+
+    if (detect_task_handle_ == nullptr) {
+        ESP_LOGE(TAG, "Failed to create micro wake task");
+        return;
+    }
+
+    esp_timer_create_args_t timer_args = {};
+    timer_args.callback = &MicroWakeWordDetect::PeriodTimerCallback;
+    timer_args.arg = this;
+    timer_args.dispatch_method = ESP_TIMER_TASK;
+    timer_args.name = "micro_ww_tick";
+    timer_args.skip_unhandled_events = true;
+    esp_err_t err = esp_timer_create(&timer_args, &period_timer_handle_);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "esp_timer_create failed: %s", esp_err_to_name(err));
+        return;
+    }
+
+    ESP_LOGI(TAG,
+        "Initialized (timer-driven loop every %d ms; FreeRTOS tick=%d Hz -> do not use vTaskDelay for sub-10ms)",
+        MICRO_WW_LOOP_PERIOD_MS, CONFIG_FREERTOS_HZ);
 }
-size_t MicroWakeWordDetect::FreeSize()
-{
-    size_t free_size = 0;
-    // 在查询大小时使用互斥锁保护
-    
-    free_size = wakeWord_.free_ring_buffer();
-     
-    return free_size;
+
+void MicroWakeWordDetect::StartDetection() {
+    wakeWord_.start();
+    xEventGroupSetBits(event_group_, MICRO_WW_TASK_RUNNING_BIT);
+    if (period_timer_handle_ != nullptr) {
+        const uint64_t period_us = (uint64_t)MICRO_WW_LOOP_PERIOD_MS * 1000ULL;
+        esp_timer_stop(period_timer_handle_);
+        esp_err_t err = esp_timer_start_periodic(period_timer_handle_, period_us);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "esp_timer_start_periodic failed: %s", esp_err_to_name(err));
+        }
+    }
 }
-bool MicroWakeWordDetect::IsRunning()
-{   
-    bool is_running = false;
-    // 在查询运行状态时使用互斥锁保护
-    
-        is_running = wakeWord_.is_running();
-    
-    return is_running;
+
+void MicroWakeWordDetect::Stop() {
+    if (period_timer_handle_ != nullptr) {
+        esp_timer_stop(period_timer_handle_);
+    }
+    wakeWord_.stop();
+    xEventGroupClearBits(event_group_, MICRO_WW_TASK_RUNNING_BIT);
+    if (detect_task_handle_ != nullptr) {
+        xTaskNotifyGive(detect_task_handle_);
+    }
+    ESP_LOGW(TAG, "Stop");
+}
+
+void MicroWakeWordDetect::Feed(const std::vector<int16_t>& data) {
+    if (data.empty() || wakeWord_.ring_buffer_ == nullptr) {
+        return;
+    }
+    wakeWord_.feed(data);
+}
+
+size_t MicroWakeWordDetect::FreeSize() {
+    return wakeWord_.free_ring_buffer();
+}
+
+bool MicroWakeWordDetect::IsRunning() {
+    return wakeWord_.is_running();
+}
+
+void MicroWakeWordDetect::DetectionTask() {
+    TickType_t last_stack_log_tick = xTaskGetTickCount();
+    ESP_LOGI(TAG, "Micro wake task started, prio=%d core=%d (loop tick from esp_timer, %d ms)",
+        MICRO_WW_TASK_PRIORITY, MICRO_WW_TASK_CORE, MICRO_WW_LOOP_PERIOD_MS);
+
+    while (true) {
+        xEventGroupWaitBits(
+            event_group_, MICRO_WW_TASK_RUNNING_BIT, pdFALSE, pdTRUE, portMAX_DELAY);
+
+        while (xEventGroupGetBits(event_group_) & MICRO_WW_TASK_RUNNING_BIT) {
+            ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+            if ((xEventGroupGetBits(event_group_) & MICRO_WW_TASK_RUNNING_BIT) == 0) {
+                break;
+            }
+            wakeWord_.loop();
+
+            TickType_t now = xTaskGetTickCount();
+            if (now - last_stack_log_tick >= pdMS_TO_TICKS(10000)) {
+                UBaseType_t high_water = uxTaskGetStackHighWaterMark(nullptr);
+                ESP_LOGI(TAG, "micro_wake_task stack high water: %u words", (unsigned)high_water);
+                last_stack_log_tick = now;
+            }
+        }
+    }
 }
