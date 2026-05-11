@@ -147,7 +147,7 @@ namespace esphome
         }
         break;
       case State::STOP_MICROPHONE:
-        ESP_LOGD(TAG, "Stopping Microphone");
+        ESP_LOGW(TAG, "Stopping Microphone");
         this->set_state_(State::STOPPING_MICROPHONE);
         break;
       case State::STOPPING_MICROPHONE:
@@ -172,6 +172,15 @@ namespace esphome
         return;
       }
 
+      // Must run before load_models_/allocate_buffers_: repeat start() would call
+      // FrontendPopulateState again while still detecting and corrupt frontend_state_
+      // (e.g. memcpy to NULL in FrontendProcessSamples).
+      if (this->state_ != State::IDLE)
+      {
+        ESP_LOGW(TAG, "Wake word is already running");
+        return;
+      }
+
       if (!this->load_models_() || !this->allocate_buffers_())
       {
         ESP_LOGE(TAG, "Failed to load the wake word model(s) or allocate buffers");
@@ -185,12 +194,6 @@ namespace esphome
       if (this->status_has_error())
       {
         ESP_LOGW(TAG, "Wake word component has an error. Please check logs");
-        return;
-      }
-
-      if (this->state_ != State::IDLE)
-      {
-        ESP_LOGW(TAG, "Wake word is already running");
         return;
       }
 
@@ -211,6 +214,7 @@ namespace esphome
         return;
       }
       this->set_state_(State::STOP_MICROPHONE);
+      ESP_LOGW(TAG,"Set_state_(State::STOP_MICROPHONE);");
     }
     size_t MicroWakeWord::free_ring_buffer(){
       std::lock_guard<std::mutex> lock(mutex_);

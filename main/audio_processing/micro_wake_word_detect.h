@@ -10,6 +10,7 @@
 #include <freertos/event_groups.h>
 #include <freertos/task.h>
 #include <functional>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -47,6 +48,7 @@ private:
     StaticTask_t detect_task_buffer_;
     StackType_t* detect_task_stack_ = nullptr;
     esp_timer_handle_t period_timer_handle_ = nullptr;
+    std::mutex loop_mutex_;
 };
 
 #endif

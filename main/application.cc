@@ -816,7 +816,7 @@ void Application::OnClockTimer() {
     // Print the debug info every 10 seconds
     if (clock_ticks_ % 3 == 0) {
         // SystemInfo::PrintTaskCpuUsage(pdMS_TO_TICKS(1000));
-        SystemInfo::PrintTaskList();
+        //SystemInfo::PrintTaskList();
         //SystemInfo::PrintHeapStats();
 
         // If we have synchronized server time, set the status to clock "HH:MM" if the device is idle
@@ -870,7 +870,7 @@ void Application::MainEventLoop() {
 
         if (bits & SCHEDULE_EVENT) {   //设备状态切换
             std::unique_lock<std::mutex> lock(mutex_);
-            ESP_LOGI(TAG,"主循环调度器事件已获取锁");
+            //ESP_LOGI(TAG,"主循环调度器事件已获取锁");
             auto tasks = std::move(main_tasks_);
             lock.unlock();
             for (auto& task : tasks) {
@@ -1098,7 +1098,9 @@ void Application::SetDeviceState(DeviceState state) {
             display->SetStatus(Lang::Strings::STANDBY);
             display->SetEmotion("neutral");
             audio_processor_->Stop();
+            ESP_LOGI(TAG,"IDEL STATE ");
             if(!micro_wake_word_->IsRunning()){
+                ESP_LOGI(TAG,"MICRO START DETECT");
                 micro_wake_word_->StartDetection();
                 wake_word_->StartDetection();
             }
@@ -1130,8 +1132,9 @@ void Application::SetDeviceState(DeviceState state) {
                 }
                 opus_encoder_->ResetState();
                 audio_processor_->Start();
-
+                ESP_LOGI(TAG,"Listening STATE ");
                 if(micro_wake_word_->IsRunning()){
+                    ESP_LOGI(TAG,"MICRO STOP DETECT");
                     wake_word_->StopDetection();
                     micro_wake_word_->Stop();
                 }
@@ -1144,8 +1147,10 @@ void Application::SetDeviceState(DeviceState state) {
             if (listening_mode_ != kListeningModeRealtime) {
                 ESP_LOGI(TAG,"非实时模式");
                 audio_processor_->Stop();
+                ESP_LOGI(TAG,"Speaking STATE ");
                 // Only AFE wake word can be detected in speaking mode 
                 if(!micro_wake_word_->IsRunning()){
+                    ESP_LOGI(TAG,"MICRO START DETECT");
                     micro_wake_word_->StartDetection();
                     wake_word_->StartDetection();
                 }

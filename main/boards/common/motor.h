@@ -20,7 +20,7 @@ private:
     esp_timer_handle_t motor_protect_timer_handle_;
     // 检测部分
     esp_timer_handle_t angle_read_timer_handle_;
-    bool direction_= false; 
+    bool direction_= true; 
     float target_angle_;
     adc_oneshot_unit_handle_t adc1_handle_;
     float AdcToAngle(int& adc_value);

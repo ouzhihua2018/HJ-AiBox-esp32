@@ -25,6 +25,8 @@
 #include "motor.h"
 #define TAG "TDi-300-PH-MainBoard"
 
+//#define WBY_STYLE
+
 uint8_t uid[RC522_PICC_UID_SIZE_MAX] = {0};
 
 static void on_picc_state_changed(void *arg, esp_event_base_t base, int32_t event_id, void *data)
@@ -68,7 +70,42 @@ private:
     i2c_master_dev_handle_t pca9557_handle_;
     motor motor_;
     float target_angle_;
-    
+    int current_pwm_ = 0;
+    int current_mode_ = 0;
+#ifdef WBY_STYLE
+    void InitializeRgbControl() {
+        const ledc_timer_config_t backlight_timer = {
+        .speed_mode = LEDC_LOW_SPEED_MODE,
+        .duty_resolution = LEDC_TIMER_10_BIT,
+        .timer_num = LEDC_TIMER_0,
+        .freq_hz = 25000, //背光pwm频率需要高一点，防止电感啸叫
+        .clk_cfg = LEDC_AUTO_CLK,
+        .deconfigure = false
+    };
+    ESP_ERROR_CHECK(ledc_timer_config(&backlight_timer));
+        // 直接使用定时器0
+        // Setup LEDC peripheral for PWM backlight control
+        ledc_channel_config_t backlight_channel = {
+            .gpio_num = RGB_W,
+            .speed_mode = LEDC_LOW_SPEED_MODE,
+            .channel = LEDC_CHANNEL_1,
+            .intr_type = LEDC_INTR_DISABLE,
+            .timer_sel = LEDC_TIMER_0,
+            .duty = 0,
+            .hpoint = 0,
+            .flags = {
+                .output_invert = false,
+            }
+        };
+        ESP_ERROR_CHECK(ledc_channel_config(&backlight_channel));
+        backlight_channel.gpio_num = RGB_Y;
+        backlight_channel.channel = LEDC_CHANNEL_2;
+        ESP_ERROR_CHECK(ledc_channel_config(&backlight_channel));
+        backlight_channel.gpio_num = RGB_B;
+        backlight_channel.channel = LEDC_CHANNEL_3;
+        ESP_ERROR_CHECK(ledc_channel_config(&backlight_channel));
+    }
+#endif
     void InitializeI2c()
     {
         // Initialize I2C peripheral
@@ -178,10 +215,60 @@ private:
         boot_button_.OnClick([this]()
                              {
             //power_save_timer_->WakeUp();
+            ESP_LOGI(TAG,"BOOT BUTTON");
+            
+#ifdef WBY_STYLE
+            current_pwm_+= 341; //1023
+            if(current_pwm_ > 1023) current_pwm_ = 0;                    
+            ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1, current_pwm_);
+            ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1);
+            ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_2, current_pwm_);
+            ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_2);
+            ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_3, current_pwm_);
+            ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_3);
+#else
+            //power_save_timer_->WakeUp();
             auto& app = Application::GetInstance();
             ESP_LOGE(TAG,"BOOT BUTTON");
-            app.ToggleChatState(); });
-
+            app.ToggleChatState();
+#endif
+             });
+#ifdef WBY_STYLE
+        boot_button_.OnLongPress([this]()
+                                 {  //切换灯的模式
+                                    ESP_LOGI(TAG,"BOOT LONG PRESS");
+                                    current_mode_++;
+                                    if(current_mode_ > 2) current_mode_ = 0;
+                                    switch(current_mode_){
+                                        case 0:
+                                            ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1, 1023);
+                                            ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1);
+                                            ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_2, 0);
+                                            ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_2);
+                                            ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_3, 0);
+                                            ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_3);
+                                            break;
+                                        case 1:
+                                            ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1, 0);
+                                            ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1);
+                                            ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_2, 1023);
+                                            ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_2);
+                                            ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_3, 0);
+                                            ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_3);
+                                            break;
+                                        case 2:
+                                            ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1, 0);
+                                            ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1);
+                                            ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_2, 0);
+                                            ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_2);
+                                            ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_3, 1023);
+                                            ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_3);
+                                            break;
+                                        default:
+                                            break;
+                                    }
+                                 });
+#endif
         // boot_button_.OnLongPress([this]()
         //                          {
         //                              auto &app = Application::GetInstance();
@@ -196,6 +283,7 @@ private:
         //         auto& wifi_board = static_cast<WifiBoard&>(GetCurrentBoard());
         //         wifi_board.ResetWifiConfiguration();
         //     } }, 3);
+
         volume_up_button_.OnClick([this]()
                                   {
                                       //power_save_timer_->WakeUp();
@@ -271,7 +359,9 @@ private:
     }
 
 public:
-    TDi_300_PH() : DualNetworkBoard(ML307_TX_PIN, ML307_RX_PIN, 4096),
+    // ML307 UART 接收缓冲（传入 Ml307AtModem，驱动内为 size*2）。921600 下突发易 FIFO overflow，
+    // overflow 会触发组件内 UDP 主动 Disconnect，表现为「未连接」洪泛；适当加大可缓解。
+    TDi_300_PH() : DualNetworkBoard(ML307_TX_PIN, ML307_RX_PIN, 8192),
                    boot_button_(BOOT_BUTTON_GPIO),
                    volume_up_button_(VOLUME_UP_BUTTON_GPIO),
                    volume_down_button_(VOLUME_DOWN_BUTTON_GPIO)
@@ -286,12 +376,15 @@ public:
             app.NotifyResetResult(result);
         });
         // InitializeSpi();
-
+#ifdef WBY_STYLE
+        InitializeRgbControl();
+#else
+        InitializeRc522();
+#endif
         InitializeButtons();
         //motor_.motor_test();
         vTaskDelay(pdMS_TO_TICKS(50));
-        //InitializeAngleDetect();
-        InitializeRc522();
+ 
         
     }
     virtual void StartRfidScan() override

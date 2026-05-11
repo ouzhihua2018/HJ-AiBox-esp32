@@ -87,6 +87,22 @@ void MicroWakeWordDetect::InitializeWakeWordDetect() {
 }
 
 void MicroWakeWordDetect::StartDetection() {
+    // Idle 里会 StartDetection；Application 里还有一次延迟 StartDetection（如 5s 定时器）。
+    // 若重复调用 start()，旧实现会在 state!=IDLE 时仍先执行 load_models_()，损坏前端状态并崩溃。
+    if ((xEventGroupGetBits(event_group_) & MICRO_WW_TASK_RUNNING_BIT) != 0 &&
+        wakeWord_.is_running()) {
+        ESP_LOGD(TAG, "StartDetection: already armed, skip duplicate start");
+        if (period_timer_handle_ != nullptr) {
+            const uint64_t period_us = (uint64_t)MICRO_WW_LOOP_PERIOD_MS * 1000ULL;
+            esp_timer_stop(period_timer_handle_);
+            esp_err_t err = esp_timer_start_periodic(period_timer_handle_, period_us);
+            if (err != ESP_OK) {
+                ESP_LOGE(TAG, "esp_timer_start_periodic failed: %s", esp_err_to_name(err));
+            }
+        }
+        return;
+    }
+
     wakeWord_.start();
     xEventGroupSetBits(event_group_, MICRO_WW_TASK_RUNNING_BIT);
     if (period_timer_handle_ != nullptr) {
@@ -103,7 +119,20 @@ void MicroWakeWordDetect::Stop() {
     if (period_timer_handle_ != nullptr) {
         esp_timer_stop(period_timer_handle_);
     }
-    wakeWord_.stop();
+    {
+        std::lock_guard<std::mutex> lock(loop_mutex_);
+        wakeWord_.stop();
+        // stop() 只把状态推到 STOP_MICROPHONE；必须再跑 loop() 才能经 STOPPING_MICROPHONE 回到 IDLE。
+        // 若此处立刻 ClearBits，检测任务可能在 Take 返回后因 RUNNING=0 直接 break，从未调用 loop()，
+        // 状态会永久卡在非 IDLE，start() 会报 "Wake word is already running"（按键等快路径更易触发）。
+        const int k_max_stop_drain = 16;
+        for (int i = 0; i < k_max_stop_drain && wakeWord_.is_running(); ++i) {
+            wakeWord_.loop();
+        }
+        if (wakeWord_.is_running()) {
+            ESP_LOGW(TAG, "Stop: state machine did not reach IDLE after drain");
+        }
+    }
     xEventGroupClearBits(event_group_, MICRO_WW_TASK_RUNNING_BIT);
     if (detect_task_handle_ != nullptr) {
         xTaskNotifyGive(detect_task_handle_);
@@ -131,7 +160,7 @@ void MicroWakeWordDetect::DetectionTask() {
     ESP_LOGI(TAG, "Micro wake task started, prio=%d core=%d (loop tick from esp_timer, %d ms)",
         MICRO_WW_TASK_PRIORITY, MICRO_WW_TASK_CORE, MICRO_WW_LOOP_PERIOD_MS);
 
-    while (true) {
+    while (true) {  
         xEventGroupWaitBits(
             event_group_, MICRO_WW_TASK_RUNNING_BIT, pdFALSE, pdTRUE, portMAX_DELAY);
 
@@ -140,7 +169,10 @@ void MicroWakeWordDetect::DetectionTask() {
             if ((xEventGroupGetBits(event_group_) & MICRO_WW_TASK_RUNNING_BIT) == 0) {
                 break;
             }
-            wakeWord_.loop();
+            {
+                std::lock_guard<std::mutex> lock(loop_mutex_);
+                wakeWord_.loop();
+            }
 
             TickType_t now = xTaskGetTickCount();
             if (now - last_stack_log_tick >= pdMS_TO_TICKS(10000)) {

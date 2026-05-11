@@ -51,10 +51,10 @@ void motor::InitMotor(gpio_num_t MOTOR_PWM_GPIO, gpio_num_t MOTOR_PWM2_GPIO)
     ledc_conf.channel = LEDC_CHANNEL_2;
     ledc_conf.gpio_num = MOTOR_PWM2_GPIO;
     ledc_channel_config(&ledc_conf);
-
+#ifndef WBY_STYLE
     InitAngleDetecter();
     InitMotorProtect();
-
+#endif
     auto &mcp_server = McpServer::GetInstance();
 
     mcp_server.AddTool("self.motor.start",
@@ -229,9 +229,10 @@ void motor::SetSpeedLevel(int level)
         ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_2, target_pwm);
         ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_2);
     }
-
+#ifndef WBY_STYLE
     if (level == SPEED_STOP)
     {
+        
         if (esp_timer_is_active(motor_protect_timer_handle_))
             esp_timer_stop(motor_protect_timer_handle_);
         IsMotorStall(-100.0f);
@@ -241,6 +242,7 @@ void motor::SetSpeedLevel(int level)
         if (!esp_timer_is_active(motor_protect_timer_handle_))
             esp_timer_start_periodic(motor_protect_timer_handle_, STALL_CHECK_INTERVAL_MS * 1000);
     }
+#endif
 }
 
 void motor::ReverseDirection()
