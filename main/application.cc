@@ -785,7 +785,9 @@ void Application::Start() {
     micro_wake_word_->InitializeWakeWordDetect();
     // micro_wake_word_->StartDetection();
     // wake_word_->StartDetection();
-    esp_timer_start_once(microwakeword_timer_handle_,1000*1000*3);
+    micro_wake_word_->StartDetection();
+    if(!protocol_->IsAudioChannelOpened()) wake_word_->StartDetection();
+    //esp_timer_start_once(microwakeword_timer_handle_,1000*1000*1);
     // Wait for the new version check to finish
     xEventGroupWaitBits(event_group_, CHECK_NEW_VERSION_DONE_EVENT, pdTRUE, pdFALSE, portMAX_DELAY);
     

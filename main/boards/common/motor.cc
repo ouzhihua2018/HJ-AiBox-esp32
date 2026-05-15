@@ -181,9 +181,9 @@ void motor::InitAngleDetecter()
                 this_->SetSpeedLevel(SPEED_STOP);
                 ESP_LOGI(TAG, "Reached target angle: %.1f, current: %.1f", this_->target_angle_, current_angle);
                 esp_timer_stop(this_->angle_read_timer_handle_);
-                if(this_->on_reset_callback_){
-                    this_->on_reset_callback_(true);
-               }
+            //     if(this_->on_reset_callback_){
+            //         this_->on_reset_callback_(true);
+            //    }
                 this_->target_angle_ = -1.0f;
             }
         },

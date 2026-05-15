@@ -39,6 +39,7 @@ file(GLOB BOARD_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/boards/${BOARD_TYPE}/*.c
 )
 list(APPEND SOURCES ${BOARD_SOURCES})
+list(APPEND INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/boards/${BOARD_TYPE})
 
 
 
@@ -93,6 +94,7 @@ target_compile_definitions(${COMPONENT_LIB}
                     PRIVATE BOARD_TYPE=\"${BOARD_TYPE}\" BOARD_NAME=\"${BOARD_NAME}\"
                     )
 
+target_compile_definitions(${COMPONENT_LIB} PRIVATE WBY_STYLE)
 # 添加生成规则
 add_custom_command(
     OUTPUT ${LANG_HEADER}

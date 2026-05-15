@@ -30,6 +30,8 @@
 #define MOTOR_PWM2_GPIO   GPIO_NUM_3
 #define MOTOR_PWM_GPIO   GPIO_NUM_5
 #define MOTOR_ADC_GPIO   GPIO_NUM_4
+
+
 #ifdef WBY_STYLE
 #define RGB_B   GPIO_NUM_41
 #define RGB_Y   GPIO_NUM_40

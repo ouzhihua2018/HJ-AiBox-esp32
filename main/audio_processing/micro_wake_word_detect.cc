@@ -39,9 +39,9 @@ MicroWakeWordDetect::~MicroWakeWordDetect() {
 
 void MicroWakeWordDetect::InitializeWakeWordDetect() {
     const uint8_t* model = stream_state_internal_quant_tflite;
-    const uint8_t* model2 = stream_state_internal_quant_tflite2;
-    wakeWord_.add_wake_word_model(model, 0.98f, 3, "xiaolexiaole", 34000);
-    wakeWord_.add_wake_word_model(model2, 0.98f, 3, "xiaolaxiaola", 34000);
+    //const uint8_t* model2 = stream_state_internal_quant_tflite2;
+    wakeWord_.add_wake_word_model(model, 0.99f, 3, "xiaolexiaole", 34000);
+    //wakeWord_.add_wake_word_model(model2, 0.99f, 3, "xiaolaxiaola", 34000);
     wakeWord_.set_features_step_size(4);
     wakeWord_.add_detection_callback(std::move(callback_));
     wakeWord_.setup();

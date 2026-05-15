@@ -23,7 +23,7 @@
 #define MICRO_WW_TASK_STACK_WORDS (4096)
 #define MICRO_WW_TASK_PRIORITY 6
 #define MICRO_WW_TASK_CORE 1
-#define MICRO_WW_LOOP_PERIOD_MS 3
+#define MICRO_WW_LOOP_PERIOD_MS 4
 
 class MicroWakeWordDetect {
 public:
