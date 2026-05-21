@@ -1171,6 +1171,7 @@ void Application::SetDeviceState(DeviceState state) {
             wake_word_->StopDetection();
             board.StopRfidScan();
             board.StopMotorWork();
+            board.StopLedWork();
             break;
         default:
             // Do nothing

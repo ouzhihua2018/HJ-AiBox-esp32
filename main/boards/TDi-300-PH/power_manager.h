@@ -1,4 +1,5 @@
 #pragma once
+#include <algorithm>
 #include <vector>
 #include <functional>
 #include <esp_log.h>
@@ -25,11 +26,13 @@ private:
     bool warned_20_percent_ = false;
     float current_temperature_ = 0.0f;
     int ticks_ = 0;
-    const int kBatteryAdcInterval = 5;
-    const int kBatteryAdcDataCount = 5;
-    const int kLowBatteryLevel = 10;
+    const int kBatteryAdcInterval = 0;
+    const int kBatteryAdcDataCount = 3;
+    const int kLowBatteryLevel = 20;
+    const int kWbyLedBatteryCompensation = 15;  
+    std::function<bool()> is_wby_led_on_;
     const int kWarnBatteryLevel30 = 30;
-    const int kWarnBatteryLevel20 = 20;
+    const int kWarnBatteryLevel20 = 25;
     const int kTemperatureReadInterval = 10; // 每 10 秒读取一次温度
 
     adc_oneshot_unit_handle_t adc_handle_;
@@ -60,9 +63,9 @@ private:
 
         // 如果电池电量数据充足，则每 kBatteryAdcInterval 个 tick 读取一次电池电量数据
         ticks_++;
-        if (ticks_ % kBatteryAdcInterval == 0) {
+        // if (ticks_ % kBatteryAdcInterval == 0) {
             ReadBatteryAdcData();
-        }
+        //}
 
         // 新增：周期性读取温度
         if (ticks_ % kTemperatureReadInterval == 0) {
@@ -165,11 +168,23 @@ private:
         }
     }
 
+    bool IsWbyLedOn() const {
+        return is_wby_led_on_ && is_wby_led_on_();
+    }
+
+    uint8_t GetEffectiveBatteryLevelForPolicy() const {
+        int level = static_cast<int>(battery_level_);
+        if (IsWbyLedOn()) {
+            level = std::min(100, level + kWbyLedBatteryCompensation);
+        }
+        return static_cast<uint8_t>(level);
+    }
+
     void UpdateLowBatteryState() {
         if (adc_values_.size() < kBatteryAdcDataCount) {
             return;
         }
-        bool should_low = (battery_level_ <= kLowBatteryLevel) && !is_charging_;
+        bool should_low = (GetEffectiveBatteryLevelForPolicy() <= kLowBatteryLevel) && !is_charging_;
         auto& app = Application::GetInstance();
         if (should_low){
             app.ResetDecoder();
@@ -277,10 +292,17 @@ public:
         return !is_charging_;
     }
 
-    // 获取电池电量
+    // 返回对外展示的电量（WBY 开灯时 +10%，抵消灯载压降）
     uint8_t GetBatteryLevel() {
-        // 返回电池电量
-        return battery_level_;
+        return GetEffectiveBatteryLevelForPolicy();
+    }
+
+    void SetWbyLedOnProvider(std::function<bool()> provider) {
+        is_wby_led_on_ = std::move(provider);
+    }
+
+    void RefreshLowBatteryState() {
+        UpdateLowBatteryState();
     }
 
     float GetTemperature() const { return current_temperature_; }  // 获取当前温度

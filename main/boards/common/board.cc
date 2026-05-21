@@ -53,6 +53,11 @@ bool Board::GetMotorSpeed(int &current_speed)
     return false;
 }
 
+bool Board::GetLedState(std::string& effect, int& speed_ms, int& intensity, int& white, int& yellow, int& blue)
+{
+    return false;
+}
+
 bool Board::GetTemperature(float& esp32temp){
     return false;
 }

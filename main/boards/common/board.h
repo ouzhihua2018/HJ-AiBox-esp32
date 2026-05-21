@@ -34,6 +34,7 @@ public:
     virtual void StartRfidScan() {};
     virtual void StopRfidScan() {};
     virtual void StopMotorWork() {};
+    virtual void StopLedWork() {};
     virtual ~Board() = default;
     virtual std::string GetBoardType() = 0;
     virtual std::string GetUuid() { return uuid_; }
@@ -53,6 +54,7 @@ public:
     virtual const char* GetNetworkStateIcon() = 0;
     virtual bool GetBatteryLevel(int &level, bool& charging, bool& discharging);
     virtual bool GetMotorSpeed(int &current_speed);
+    virtual bool GetLedState(std::string& effect, int& speed_ms, int& intensity, int& white, int& yellow, int& blue);
     virtual std::string GetJson();
     virtual void SetPowerSaveMode(bool enabled) = 0;
     virtual std::string GetBoardJson() = 0;

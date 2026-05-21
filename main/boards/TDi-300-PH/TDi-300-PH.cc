@@ -300,6 +300,10 @@ public:
         // InitializeSpi();
 #ifdef WBY_STYLE
         wby_led_.Initwbyled(MOTOR_PWM_GPIO, MOTOR_PWM2_GPIO);
+        power_manager_->SetWbyLedOnProvider([this]() { return wby_led_.IsLedOn(); });
+        wby_led_.OnLedStateChanged([this](bool /*on*/) {
+            power_manager_->RefreshLowBatteryState();
+        });
 #else
         InitializeRc522();
 #endif
@@ -320,6 +324,10 @@ public:
     virtual void StopMotorWork() override
     {
         motor_.SetSpeedLevel(0);
+    }
+    virtual void StopLedWork() override
+    {
+        wby_led_.stopwbyled();
     }
     virtual Led *GetLed() override
     {
@@ -350,6 +358,10 @@ public:
     virtual bool GetMotorSpeed(int &current_speed) override {
         current_speed = motor_.GetSpeed();
         return true;
+    }
+    virtual bool GetLedState(std::string& effect, int& speed_ms, int& intensity, int& white, int& yellow, int& blue) override {
+        return wby_led_.GetLedState(effect, speed_ms, intensity, white, yellow, blue);
+
     }
     virtual bool GetBatteryLevel(int &level, bool &charging, bool &discharging) override
     {

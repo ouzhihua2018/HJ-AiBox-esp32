@@ -9,6 +9,40 @@
 
 wbyled::wbyled() = default;
 
+void wbyled::OnLedStateChanged(std::function<void(bool on)> callback)
+{
+    on_led_state_changed_ = std::move(callback);
+}
+
+void wbyled::NotifyLedStateChanged()
+{
+    bool on = IsLedOn();
+    if (cached_led_on_.has_value() && cached_led_on_.value() == on) {
+        return;
+    }
+    cached_led_on_ = on;
+    if (on_led_state_changed_) {
+        on_led_state_changed_(on);
+    }
+}
+
+bool wbyled::IsLedOn() const
+{
+#ifdef WBY_STYLE
+    if (effect_mode_ != Effect::kNone) {
+        return true;
+    }
+    if (white_ > 0 || yellow_ > 0 || blue_ > 0) {
+        return true;
+    }
+    return ledc_get_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_3) > 0 ||
+           ledc_get_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_4) > 0 ||
+           ledc_get_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_5) > 0;
+#else
+    return false;
+#endif
+}
+
 wbyled::~wbyled()
 {
 #ifdef WBY_STYLE
@@ -18,6 +52,27 @@ wbyled::~wbyled()
         effect_timer_ = nullptr;
     }
 #endif
+}
+
+bool wbyled::GetLedState(std::string &effect, int &speed_ms, int &intensity, int &white, int &yellow, int &blue)
+{   
+    switch (effect_mode_) {
+    case Effect::kNone:
+        effect = "none";
+        break;
+    case Effect::kMarquee:
+        effect = "marquee";
+        break;
+    case Effect::kCrossfade:
+        effect = "crossfade";
+        break;
+    }
+    speed_ms = effect_speed_ms_;
+    intensity = effect_intensity_;
+    white = white_;
+    yellow = yellow_;
+    blue = blue_;
+    return true;
 }
 
 int wbyled::PercentToDuty(int percent) const
@@ -136,16 +191,7 @@ void wbyled::TickEffect()
         }
         break;
     }
-    case Effect::kBreathe: {
-        breathe_phase_ = (breathe_phase_ + 1) % 512;  // 👈 稍微加快一点点节奏
-        float rad = static_cast<float>(breathe_phase_) * (2.0f * static_cast<float>(M_PI) / 512.0f);
-        float factor = (std::sin(rad) + 1.0f) * 0.5f;
-        int d = static_cast<int>(peak * factor);
-        ApplyDuty(d, d, d);
-        break;
-    }
     case Effect::kCrossfade: {
-        // 👈 512 步超丝滑渐变
         int sub = effect_step_ % 512;
         effect_step_++;
 
@@ -191,10 +237,6 @@ bool wbyled::EffectNameToMode(const std::string &name, Effect &out)
         out = Effect::kMarquee;
         return true;
     }
-    if (lower == "breathe" || lower == "pulse") {
-        out = Effect::kBreathe;
-        return true;
-    }
     if (lower == "crossfade" || lower == "gradient" || lower == "fade") {
         out = Effect::kCrossfade;
         return true;
@@ -208,13 +250,17 @@ bool wbyled::EffectNameToMode(const std::string &name, Effect &out)
         out = Effect::kCrossfade;
         return true;
     }
-    if (name == "\xe5\x91\xbc\xe5\x90\xb8" /* 呼吸 */) {
-        out = Effect::kBreathe;
-        return true;
-    }
     return false;
 }
-
+void wbyled::stopwbyled(){
+    StopEffectTimer();
+    // 清除单独灯亮度
+    white_ = 0;
+    yellow_ = 0;
+    blue_ = 0;
+    ApplyDuty(0, 0, 0);
+    NotifyLedStateChanged();
+}
 void wbyled::Initwbyled(gpio_num_t motor_pwm_gpio, gpio_num_t motor_pwm2_gpio)
 {
     (void)motor_pwm_gpio;
@@ -257,26 +303,74 @@ void wbyled::Initwbyled(gpio_num_t motor_pwm_gpio, gpio_num_t motor_pwm2_gpio)
         .skip_unhandled_events = true,
     };
     ESP_ERROR_CHECK(esp_timer_create(&targs, &effect_timer_));
+    NotifyLedStateChanged();
 
     auto &mcp = McpServer::GetInstance();
 
-    mcp.AddTool(
-        "self.wby_rgb.set_channels",
-        "Set WBY ambient RGB channels (white / yellow / blue) brightness 0-100. Stops any running light effect. "
-        "Map user phrases: 白/暖白 -> white; 黄/暖黄 -> yellow; 蓝/冷蓝 -> blue. "
-        "Examples: yellow+blue on -> yellow=80,blue=80,white=0; all warm -> white+yellow. "
-        "仅返回操作结果，不要解释过程。",
-        PropertyList({Property("white", kPropertyTypeInteger, 0, 0, 100),
-                      Property("yellow", kPropertyTypeInteger, 0, 0, 100),
-                      Property("blue", kPropertyTypeInteger, 0, 0, 100)}),
-        [this](const PropertyList &properties) -> ReturnValue {
-            StopEffectTimer();
-            int w = properties["white"].value<int>();
-            int y = properties["yellow"].value<int>();
-            int b = properties["blue"].value<int>();
-            ApplyDuty(PercentToDuty(w), PercentToDuty(y), PercentToDuty(b));
-            return true;
-        });
+    // mcp.AddTool(
+    //     "self.wby_rgb.set_channels",
+    //     "Set WBY ambient RGB channels (white / yellow / blue) brightness 0-100. Stops any running light effect. "
+    //     "Map user phrases: 白/暖白 -> white; 黄/暖黄 -> yellow; 蓝/冷蓝 -> blue. "
+    //     "Examples: yellow+blue on -> yellow=80,blue=80,white=0; all warm -> white+yellow. "
+    //     "仅返回操作结果，不要解释过程。",
+    //     PropertyList({Property("white", kPropertyTypeInteger, 0, 0, 100),
+    //                   Property("yellow", kPropertyTypeInteger, 0, 0, 100),
+    //                   Property("blue", kPropertyTypeInteger, 0, 0, 100)}),
+    //     [this](const PropertyList &properties) -> ReturnValue {
+    //         StopEffectTimer();
+    //         //清除效果
+    //         effect_mode_ = Effect::kNone;
+    //         effect_speed_ms_ = -1;
+    //         effect_intensity_ = -1;
+            
+    //         white_ = properties["white"].value<int>();
+    //         yellow_ = properties["yellow"].value<int>();
+    //         blue_ = properties["blue"].value<int>();
+    //         ApplyDuty(PercentToDuty(white_), PercentToDuty(yellow_), PercentToDuty(blue_));
+    //         NotifyLedStateChanged();
+    //         return true;
+    //     });
+
+//Examples: yellow+blue on -> yellow=80,blue=80,white=0; all warm -> white+yellow
+        mcp.AddTool(
+            "self.wby_rgb.set_channels",
+            "Set WBY ambient RGB channels (white / yellow / blue) brightness 0-100. Stops any running light effect. "
+            "Map user phrases: 白/暖白 -> white; 黄/暖黄 -> yellow; 蓝/冷蓝 -> blue. "
+            "Examples: yellow on -> yellow=80,blue=0,white=0;"
+            "同一时间只允许一个灯光开启，若用户提出同时打开所有灯光或同时打开白光和黄光则反馈无法同时打开"
+            "仅返回操作结果，不要解释过程。",
+            PropertyList({Property("white", kPropertyTypeInteger, 0, 0, 100),
+                        Property("yellow", kPropertyTypeInteger, 0, 0, 100),
+                        Property("blue", kPropertyTypeInteger, 0, 0, 100)}),
+            [this](const PropertyList &properties) -> ReturnValue {
+                StopEffectTimer();
+                //清除效果
+                effect_mode_ = Effect::kNone;
+                effect_speed_ms_ = -1;
+                effect_intensity_ = -1;
+                
+                int white = properties["white"].value<int>();
+                int yellow = properties["yellow"].value<int>();
+                int blue = properties["blue"].value<int>();
+
+                int w = 0, y = 0, b = 0;
+                if (white > 0) {
+                    w = white;
+                } else if (yellow > 0) {
+                    y = yellow;
+                } else if (blue > 0) {
+                    b = blue;
+                }
+
+                white_ = w;
+                yellow_ = y;
+                blue_ = b;
+
+                ApplyDuty(PercentToDuty(white_), PercentToDuty(yellow_), PercentToDuty(blue_));
+                NotifyLedStateChanged();
+                return true;
+            });
+
 
     mcp.AddTool(
         "self.wby_rgb.off",
@@ -284,7 +378,12 @@ void wbyled::Initwbyled(gpio_num_t motor_pwm_gpio, gpio_num_t motor_pwm2_gpio)
         PropertyList(),
         [this](const PropertyList &) -> ReturnValue {
             StopEffectTimer();
+            // 清除单独灯亮度
+            white_ = 0;
+            yellow_ = 0;
+            blue_ = 0;
             ApplyDuty(0, 0, 0);
+            NotifyLedStateChanged();
             return true;
         });
 
@@ -293,10 +392,9 @@ void wbyled::Initwbyled(gpio_num_t motor_pwm_gpio, gpio_num_t motor_pwm2_gpio)
         "Run a light effect on white/yellow/blue channels. Stops previous effect. "
         "effect: 'marquee' (跑马灯, cycles W->Y->B one at a time), "
         "'crossfade' (渐变, smooth blend W<->Y<->B), "
-        "'breathe' (呼吸/整体亮度脉动, synced on all three), "
         "'none'|'off'|'solid' to stop and keep current PWM until set_channels/off. "
-        "speed_ms: step period 50-2000 (smaller = faster). intensity: peak brightness 1-100. "
-        "用户说跑马灯 -> marquee; 渐变/流水变色 -> crossfade; 呼吸灯 -> breathe.",
+        "speed_ms: step period 50-2000 (smaller = faster)，渐变效果默认50速度. intensity: peak brightness 1-100. "
+        "用户说跑马灯 -> marquee; 渐变/流水变色 -> crossfade;",
         PropertyList({Property("effect", kPropertyTypeString),
                       Property("speed_ms", kPropertyTypeInteger, 50, 50, 2000),
                       Property("intensity", kPropertyTypeInteger, 80, 1, 100)}),
@@ -305,10 +403,15 @@ void wbyled::Initwbyled(gpio_num_t motor_pwm_gpio, gpio_num_t motor_pwm2_gpio)
             if (!EffectNameToMode(properties["effect"].value<std::string>(), mode)) {
                 return std::string("unknown effect");
             }
+            // 清除单独灯亮度
+            white_ = -1;
+            yellow_ = -1;
+            blue_ = -1;
             effect_speed_ms_ = properties["speed_ms"].value<int>();
             effect_intensity_ = properties["intensity"].value<int>();
             StopEffectTimer();
             if (mode == Effect::kNone) {
+                NotifyLedStateChanged();
                 return true;
             }
             effect_mode_ = mode;
@@ -316,6 +419,7 @@ void wbyled::Initwbyled(gpio_num_t motor_pwm_gpio, gpio_num_t motor_pwm2_gpio)
             breathe_phase_ = 0;
             TickEffect();
             StartEffectTimer();
+            NotifyLedStateChanged();
             return true;
         });
 

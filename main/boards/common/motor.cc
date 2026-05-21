@@ -86,7 +86,7 @@ void motor::InitMotor(gpio_num_t MOTOR_PWM_GPIO, gpio_num_t MOTOR_PWM2_GPIO)
                            SetSpeedLevel(properties["speed"].value<int>());
                            return true;
                        });
-
+#ifndef WBY_STYLE
     // ===================== 【复位：已修复】 =====================
     mcp_server.AddTool("self.motor.reset",
                        "Start moving the motor to the reset position.\n"
@@ -116,7 +116,7 @@ void motor::InitMotor(gpio_num_t MOTOR_PWM_GPIO, gpio_num_t MOTOR_PWM2_GPIO)
                            SetSpeedLevel(SPEED_LOW);
                            return true;
                        });
-
+#endif
     mcp_server.AddTool("self.motor.reverse",
                        "Reverse motor direction.\n"
                        "Only return the final result. Do NOT explain the process.",

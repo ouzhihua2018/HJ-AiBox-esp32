@@ -207,6 +207,25 @@ std::string Ml307Board::GetDeviceStatusJson() {
         cJSON_AddItemToObject(root, "motor", motor);
     }
 
+    // WBY LED
+    std::string effect;
+    int speed_ms;
+    int intensity;
+    int white;
+    int yellow;
+    int blue;
+    if(board.GetLedState(effect, speed_ms, intensity, white, yellow, blue)){
+        cJSON* wby_led = cJSON_CreateObject();
+        cJSON_AddStringToObject(wby_led, "effect", effect.c_str());
+        cJSON_AddNumberToObject(wby_led, "speed_ms", speed_ms);
+        cJSON_AddNumberToObject(wby_led, "intensity", intensity);
+        cJSON_AddNumberToObject(wby_led, "white", white);
+        cJSON_AddNumberToObject(wby_led, "yellow", yellow);
+        cJSON_AddNumberToObject(wby_led, "blue", blue);
+        cJSON_AddItemToObject(root, "wby_led", wby_led);
+    }
+    
+
     auto json_str = cJSON_PrintUnformatted(root);
     std::string json(json_str);
     cJSON_free(json_str);
