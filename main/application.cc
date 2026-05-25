@@ -36,6 +36,9 @@
 #include <driver/gpio.h>
 #include <arpa/inet.h>
 #include "led/circular_strip.h"
+#if __has_include("config.h")
+#include "config.h"
+#endif
 #define TAG "Application"
 
 
@@ -50,6 +53,7 @@ static const char* const STATE_STRINGS[] = {
     "upgrading",
     "activating",
     "low_battery",
+    "showcase",
     "fatal_error",
 };
 
@@ -281,6 +285,9 @@ void Application::RequestLowBatteryHalt() {
         if (device_state_ == kDeviceStateLowBattery) {
             return;
         }
+        if (device_state_ == kDeviceStateShowcase) {
+            ExitShowcase();
+        }
         if (protocol_ && protocol_->IsAudioChannelOpened()) {
             protocol_->CloseAudioChannel();
         }
@@ -301,45 +308,129 @@ void Application::ClearLowBatteryHalt() {
     });
 }
 
-void Application::PlaySound(const std::string_view& sound) {
-    //ESP_LOGI(TAG,"进入PlaySound");
-    auto codec =  Board::GetInstance().GetAudioCodec();
-    //ESP_LOGI(TAG,"当前OUTPUT_ENABLE:%d",codec->output_enabled());
-    // Wait for the previous sound to finish
-    {
-        std::unique_lock<std::mutex> lock(mutex_);
-        ESP_LOGI(TAG,"PLAY SOUND查看队列是否清空 已获取锁");
-        audio_decode_cv_.wait(lock, [this]() {
-            return audio_decode_queue_.empty();
-        });
-        //ESP_LOGI(TAG,"解码队列已清空，已获取锁");
-    }
-    ESP_LOGI(TAG,"PLAY SOUND离开条件变量作用域，释放锁");
-    background_task_->WaitForCompletion();
-
+void Application::EnqueueP3Frames(const std::string_view& sound, size_t& offset, size_t max_frames) {
     const char* data = sound.data();
-    size_t size = sound.size();
-    for (const char* p = data; p < data + size; ) {
-        auto p3 = (BinaryProtocol3*)p;
-        p += sizeof(BinaryProtocol3);
-
+    const size_t size = sound.size();
+    if (size < sizeof(BinaryProtocol3) || max_frames == 0) {
+        return;
+    }
+    if (offset >= size) {
+        offset = 0;
+    }
+    const char* p = data + offset;
+    size_t enqueued = 0;
+    while (p < data + size && enqueued < max_frames) {
+        if (static_cast<size_t>(data + size - p) < sizeof(BinaryProtocol3)) {
+            break;
+        }
+        auto p3 = reinterpret_cast<const BinaryProtocol3*>(p);
         auto payload_size = ntohs(p3->payload_size);
+        const size_t frame_bytes = sizeof(BinaryProtocol3) + payload_size;
+        if (static_cast<size_t>(data + size - p) < frame_bytes) {
+            break;
+        }
+
         AudioStreamPacket packet;
         packet.sample_rate = 16000;
         packet.frame_duration = 60;
         packet.payload.resize(payload_size);
         memcpy(packet.payload.data(), p3->payload, payload_size);
-        p += payload_size;
 
-        std::lock_guard<std::mutex> lock(mutex_);
-        ESP_LOGI(TAG,"PlaySound已获取锁");
         audio_decode_queue_.emplace_back(std::move(packet));
+        p += frame_bytes;
+        enqueued++;
     }
-   
+    offset = static_cast<size_t>(p - data);
+    if (offset >= size) {
+        offset = 0;
+    }
+}
+
+void Application::FeedShowcaseAudioIfNeeded() {
+    if (device_state_ != kDeviceStateShowcase || showcase_sound_.empty()) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (audio_decode_queue_.size() >= kShowcaseQueueLowWater) {
+        return;
+    }
+    EnqueueP3Frames(showcase_sound_, showcase_sound_offset_, kShowcaseFramesPerFeed);
+    audio_decode_cv_.notify_all();
+}
+
+void Application::StartShowcase() {
+    ESP_LOGI(TAG, "Start boot showcase (loop BGM)");
+    auto& board = Board::GetInstance();
+    auto codec = board.GetAudioCodec();
+
+    wake_word_->StopDetection();
+    micro_wake_word_->Stop();
+    board.StopRfidScan();
+    ResetDecoder();
+
+    showcase_sound_ = Lang::Sounds::P3_BOOT_SHOWCASE;
+    showcase_sound_offset_ = 0;
+    if (showcase_sound_.empty()) {
+        ESP_LOGW(TAG, "boot_showcase.p3 missing, skip showcase");
+        SetDeviceState(kDeviceStateIdle);
+        return;
+    }
+
+    codec->EnableOutput(true);
+    board.OnEnterShowcaseMode();
+    SetDeviceState(kDeviceStateShowcase);
+
+    {
+        //std::lock_guard<std::mutex> lock(mutex_);
+        FeedShowcaseAudioIfNeeded();
+    }
+}
+
+void Application::ExitShowcase() {
+    if (device_state_ != kDeviceStateShowcase) {
+        return;
+    }
+    ESP_LOGI(TAG, "Exit boot showcase");
+    auto& board = Board::GetInstance();
+    showcase_sound_ = {};
+    showcase_sound_offset_ = 0;
+    ResetDecoder();
+    board.OnExitShowcaseMode();
+    SetDeviceState(kDeviceStateIdle);
+}
+
+void Application::PlaySound(const std::string_view& sound) {
+    if (device_state_ == kDeviceStateShowcase) {
+        return;
+    }
+    // Wait for the previous sound to finish
+    {
+        std::unique_lock<std::mutex> lock(mutex_);
+        audio_decode_cv_.wait(lock, [this]() {
+            return audio_decode_queue_.empty();
+        });
+    }
+    background_task_->WaitForCompletion();
+
+    size_t offset = 0;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        while (offset < sound.size()) {
+            size_t before = offset;
+            EnqueueP3Frames(sound, offset, SIZE_MAX);
+            if (offset == before) {
+                break;
+            }
+        }
+    }
 }
 
 void Application::ToggleChatState() {
     if (device_state_ == kDeviceStateLowBattery) {
+        return;
+    }
+    if (device_state_ == kDeviceStateShowcase) {
+        ExitShowcase();
         return;
     }
     if (device_state_ == kDeviceStateActivating) {
@@ -796,12 +887,17 @@ void Application::Start() {
         std::string message = std::string(Lang::Strings::VERSION) + ota_.GetCurrentVersion();
         display->ShowNotification(message.c_str());
         display->SetChatMessage("system", "");
-        // Play the success sound to indicate the device is ready
+    }
+#if defined(BOOT_SHOWCASE_ENABLED)
+    StartShowcase();
+#else
+    if (protocol_started) {
         ResetDecoder();
         PlaySound(Lang::Sounds::P3_SUCCESS);
     }
     vTaskDelay(pdMS_TO_TICKS(200));
     SetDeviceState(kDeviceStateIdle);
+#endif
     // Print heap stats
     SystemInfo::PrintHeapStats();
     //start_core1_monitor();
@@ -908,6 +1004,11 @@ void Application::OnAudioOutput() {
     //ESP_LOGI(TAG,"AudioOutput锁已获取");
     if (audio_decode_queue_.empty()) {
         aborted_ = false;
+        if (device_state_ == kDeviceStateShowcase) {
+            lock.unlock();
+            FeedShowcaseAudioIfNeeded();
+            return;
+        }
         // Disable the output if there is no audio data for a long time
         if (device_state_ == kDeviceStateIdle || device_state_ == kDeviceStateLowBattery) {
             auto duration = std::chrono::duration_cast<std::chrono::seconds>(now - last_output_time_).count();
@@ -942,7 +1043,8 @@ void Application::OnAudioOutput() {
         }
         
         // 计算音频能量并更新LED灯条
-        if(kDeviceStateSpeaking == this->GetDeviceState()){
+        if (kDeviceStateSpeaking == this->GetDeviceState() ||
+            kDeviceStateShowcase == this->GetDeviceState()) {
             float audio_level = CalculateAudioRMS(pcm);
             UpdateLedWithAudioLevel(audio_level);
         }
@@ -962,6 +1064,9 @@ void Application::OnAudioOutput() {
         timestamp_queue_.push_back(packet.timestamp);
 #endif
         last_output_time_ = std::chrono::steady_clock::now();
+        if (device_state_ == kDeviceStateShowcase) {
+            FeedShowcaseAudioIfNeeded();
+        }
     });
 }
 void PrintAllChannels(const std::vector<int16_t>& raw_data) {
@@ -1172,6 +1277,17 @@ void Application::SetDeviceState(DeviceState state) {
             board.StopRfidScan();
             board.StopMotorWork();
             board.StopLedWork();
+            break;
+        case kDeviceStateShowcase:
+            display->SetStatus(Lang::Strings::STANDBY);
+            display->SetEmotion("happy");
+            display->SetChatMessage("system", "展示模式 · 按 BOOT 退出");
+            audio_processor_->Stop();
+            if (micro_wake_word_->IsRunning()) {
+                micro_wake_word_->Stop();
+            }
+            wake_word_->StopDetection();
+            board.StopRfidScan();
             break;
         default:
             // Do nothing

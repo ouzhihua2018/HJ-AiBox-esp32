@@ -35,6 +35,8 @@ public:
     virtual void StopRfidScan() {};
     virtual void StopMotorWork() {};
     virtual void StopLedWork() {};
+    virtual void OnEnterShowcaseMode() {}
+    virtual void OnExitShowcaseMode() {}
     virtual ~Board() = default;
     virtual std::string GetBoardType() = 0;
     virtual std::string GetUuid() { return uuid_; }

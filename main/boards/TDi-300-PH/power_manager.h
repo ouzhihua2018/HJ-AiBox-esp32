@@ -30,11 +30,15 @@ private:
     const int kBatteryAdcDataCount = 3;
     const int kLowBatteryLevel = 20;
     const int kWbyLedBatteryCompensation = 15;  
+    const int kWbyLedBatteryCompensationHighLevel = 10;  
     std::function<bool()> is_wby_led_on_;
     const int kWarnBatteryLevel30 = 30;
     const int kWarnBatteryLevel20 = 25;
+    const int kConsecutiveWarnings = 3;
     const int kTemperatureReadInterval = 10; // 每 10 秒读取一次温度
-
+    int count_20_ = 0;
+    int count_30_ = 0;
+    int count_lowbattery_ = 0;
     adc_oneshot_unit_handle_t adc_handle_;
     temperature_sensor_handle_t temp_sensor_ = NULL;  
 
@@ -130,13 +134,15 @@ private:
             }
             
         }
-        ESP_LOGI("PowerManager", "ADC value: %d average: %ld level: %ld", adc_value, average_adc, battery_level_);
+        ESP_LOGI("PowerManager", "ADC value: %d average: %ld level: %ld calibrated: %ld", adc_value, average_adc, battery_level_,GetEffectiveBatteryLevelForPolicy());
 
         UpdateBatteryWarningState();
         UpdateLowBatteryState();
     }
 
     void UpdateBatteryWarningState() {
+        int calibrated_battery = GetEffectiveBatteryLevelForPolicy() ;
+        
         if (adc_values_.size() < kBatteryAdcDataCount) {
             return;
         }
@@ -144,30 +150,48 @@ private:
             return;
         }
 
-        if (battery_level_ > kWarnBatteryLevel30) {
+        if (calibrated_battery > kWarnBatteryLevel30) {
+            count_20_ = 0; //若反复横跳回31,则重新计数
+            count_30_ = 0;
             warned_30_percent_ = false;
             warned_20_percent_ = false;
             return;
         }
 
-        if (battery_level_ <= kWarnBatteryLevel30 && battery_level_ > kWarnBatteryLevel20 && !warned_30_percent_) {
-            ESP_LOGI("bat","30！");
-            warned_30_percent_ = true;
-            if (on_battery_warning_level_changed_) {
-                on_battery_warning_level_changed_(kWarnBatteryLevel30);
-            }
-            return;
-        }
-
-        if (battery_level_ <= kWarnBatteryLevel20 && battery_level_ > kLowBatteryLevel && !warned_20_percent_) {
-            ESP_LOGI("bat","20！");
-            warned_20_percent_ = true;
-            if (on_battery_warning_level_changed_) {
-                on_battery_warning_level_changed_(kWarnBatteryLevel20);
+            // 30%~25% 区间
+    if (calibrated_battery <= kWarnBatteryLevel30 && calibrated_battery > kWarnBatteryLevel20)
+    {
+        count_20_ = 0; // 清空低级计数
+        if (!warned_30_percent_)
+        {
+            count_30_++;
+            if (count_30_ >= kConsecutiveWarnings)
+            {
+                warned_30_percent_ = true;
+                count_30_ = 0;
+                if(on_battery_warning_level_changed_)
+                    on_battery_warning_level_changed_(kWarnBatteryLevel30);
             }
         }
     }
-
+    // 25%~20% 区间
+    else if (calibrated_battery <= kWarnBatteryLevel20 && calibrated_battery > kLowBatteryLevel)
+    {
+        count_30_ = 0; // 清空高级计数
+        if (!warned_20_percent_)
+        {
+            count_20_++;
+            if (count_20_ >= kConsecutiveWarnings)
+            {
+                warned_20_percent_ = true;
+                count_20_ = 0;
+                if(on_battery_warning_level_changed_)
+                    on_battery_warning_level_changed_(kWarnBatteryLevel20);
+            }
+        
+        }
+    }
+}
     bool IsWbyLedOn() const {
         return is_wby_led_on_ && is_wby_led_on_();
     }
@@ -175,7 +199,11 @@ private:
     uint8_t GetEffectiveBatteryLevelForPolicy() const {
         int level = static_cast<int>(battery_level_);
         if (IsWbyLedOn()) {
-            level = std::min(100, level + kWbyLedBatteryCompensation);
+            if(level<=30){
+                level = std::min(100, level + kWbyLedBatteryCompensation);
+            } else {
+                level = std::min(100, level + kWbyLedBatteryCompensationHighLevel);
+            }
         }
         return static_cast<uint8_t>(level);
     }
@@ -184,12 +212,24 @@ private:
         if (adc_values_.size() < kBatteryAdcDataCount) {
             return;
         }
-        bool should_low = (GetEffectiveBatteryLevelForPolicy() <= kLowBatteryLevel) && !is_charging_;
-        auto& app = Application::GetInstance();
-        if (should_low){
-            app.ResetDecoder();
-            app.PlaySound(Lang::Sounds::P3_BATTERYLOW);
+        bool should_low = false;
+        int currLevel = GetEffectiveBatteryLevelForPolicy();
+    
+        if (currLevel <= kLowBatteryLevel && !is_charging_) {
+            count_lowbattery_++;
+            if (count_lowbattery_ >= kConsecutiveWarnings) {
+                should_low = true;
+                // 满足条件直接播报，实现重复提醒
+                auto& app = Application::GetInstance();
+                app.ResetDecoder();
+                app.PlaySound(Lang::Sounds::P3_BATTERYLOW);
+                count_lowbattery_ = 0; // 播报后重置，等待下一轮累计
+            }
+        } else {
+            count_lowbattery_ = 0;
+            should_low = false;
         }
+    
         if (should_low == is_low_battery_) {
             return;
         }

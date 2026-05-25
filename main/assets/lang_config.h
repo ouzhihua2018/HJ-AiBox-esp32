@@ -152,6 +152,13 @@ namespace Lang {
         static_cast<size_t>(p3_batterylow_end - p3_batterylow_start)
         };
 
+        extern const char p3_boot_showcase_start[] asm("_binary_boot_showcase_p3_start");
+        extern const char p3_boot_showcase_end[] asm("_binary_boot_showcase_p3_end");
+        static const std::string_view P3_BOOT_SHOWCASE {
+        static_cast<const char*>(p3_boot_showcase_start),
+        static_cast<size_t>(p3_boot_showcase_end - p3_boot_showcase_start)
+        };
+
         extern const char p3_err_pin_start[] asm("_binary_err_pin_p3_start");
         extern const char p3_err_pin_end[] asm("_binary_err_pin_p3_end");
         static const std::string_view P3_ERR_PIN {

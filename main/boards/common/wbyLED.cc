@@ -252,6 +252,39 @@ bool wbyled::EffectNameToMode(const std::string &name, Effect &out)
     }
     return false;
 }
+
+bool wbyled::SetEffect(const std::string& effect, int speed_ms, int intensity)
+{
+#ifdef WBY_STYLE
+    Effect mode = Effect::kNone;
+    if (!EffectNameToMode(effect, mode)) {
+        return false;
+    }
+    white_ = -1;
+    yellow_ = -1;
+    blue_ = -1;
+    effect_speed_ms_ = speed_ms;
+    effect_intensity_ = intensity;
+    StopEffectTimer();
+    if (mode == Effect::kNone) {
+        NotifyLedStateChanged();
+        return true;
+    }
+    effect_mode_ = mode;
+    effect_step_ = 0;
+    breathe_phase_ = 0;
+    TickEffect();
+    StartEffectTimer();
+    NotifyLedStateChanged();
+    return true;
+#else
+    (void)effect;
+    (void)speed_ms;
+    (void)intensity;
+    return false;
+#endif
+}
+
 void wbyled::stopwbyled(){
     StopEffectTimer();
     // 清除单独灯亮度
@@ -399,27 +432,11 @@ void wbyled::Initwbyled(gpio_num_t motor_pwm_gpio, gpio_num_t motor_pwm2_gpio)
                       Property("speed_ms", kPropertyTypeInteger, 50, 50, 2000),
                       Property("intensity", kPropertyTypeInteger, 80, 1, 100)}),
         [this](const PropertyList &properties) -> ReturnValue {
-            Effect mode = Effect::kNone;
-            if (!EffectNameToMode(properties["effect"].value<std::string>(), mode)) {
+            if (!SetEffect(properties["effect"].value<std::string>(),
+                           properties["speed_ms"].value<int>(),
+                           properties["intensity"].value<int>())) {
                 return std::string("unknown effect");
             }
-            // 清除单独灯亮度
-            white_ = -1;
-            yellow_ = -1;
-            blue_ = -1;
-            effect_speed_ms_ = properties["speed_ms"].value<int>();
-            effect_intensity_ = properties["intensity"].value<int>();
-            StopEffectTimer();
-            if (mode == Effect::kNone) {
-                NotifyLedStateChanged();
-                return true;
-            }
-            effect_mode_ = mode;
-            effect_step_ = 0;
-            breathe_phase_ = 0;
-            TickEffect();
-            StartEffectTimer();
-            NotifyLedStateChanged();
             return true;
         });
 

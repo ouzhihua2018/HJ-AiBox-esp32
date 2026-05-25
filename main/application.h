@@ -47,6 +47,7 @@ enum DeviceState {
     kDeviceStateUpgrading,
     kDeviceStateActivating,
     kDeviceStateLowBattery,
+    kDeviceStateShowcase,
     kDeviceStateFatalError
 };
 
@@ -81,6 +82,9 @@ public:
     void CharacterSwitch(uint8_t* uid,size_t size);
     void NotifyResetResult(bool result);
     void PlaySound(const std::string_view& sound);
+    void StartShowcase();
+    void ExitShowcase();
+    bool IsInShowcaseMode() const { return device_state_ == kDeviceStateShowcase; }
     /** 在主循环中：关会话、播低电提示音并进入 kDeviceStateLowBattery（勿在定时器回调里直接调 Application 其它接口）。 */
     void RequestLowBatteryHalt();
     void ClearLowBatteryHalt();
@@ -114,6 +118,10 @@ private:
     bool aborted_ = false;
     bool voice_detected_ = false;
     bool busy_decoding_audio_ = false;
+    std::string_view showcase_sound_;
+    size_t showcase_sound_offset_ = 0;
+    static constexpr size_t kShowcaseQueueLowWater = 8;
+    static constexpr size_t kShowcaseFramesPerFeed = 12;
     int clock_ticks_ = 0;
     TaskHandle_t check_new_version_task_handle_ = nullptr;
 
@@ -147,6 +155,8 @@ private:
     void OnClockTimer();
     void SetListeningMode(ListeningMode mode);
     void AudioLoop();
+    void EnqueueP3Frames(const std::string_view& sound, size_t& offset, size_t max_frames);
+    void FeedShowcaseAudioIfNeeded();
     
     // 音频能量计算相关函数
     float CalculateAudioRMS(const std::vector<int16_t>& audio_data);

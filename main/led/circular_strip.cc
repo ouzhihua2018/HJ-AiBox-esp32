@@ -245,6 +245,12 @@ void CircularStrip::OnStateChangedLed2() {
             Blink(color, 800);
             break;
         }
+        case kDeviceStateShowcase: {
+            StripColor low = { 0, 0, 0 };
+            StripColor high = { low_brightness_, default_brightness_, default_brightness_ };
+            Breathe(low, high, 80) ;
+            break;
+        }
         default:
             ESP_LOGW(TAG, "Unknown led strip event: %d", device_state);
             return;
@@ -301,11 +307,18 @@ void CircularStrip::OnStateChanged() {
             Blink(color, 800);
             break;
         }
+        case kDeviceStateShowcase: {
+            StripColor low = { 0, 0, 0 };
+            StripColor high = { low_brightness_, default_brightness_, default_brightness_ };
+            Breathe(low, high, 80) ;
+            break;
+        }
         default:
             ESP_LOGW(TAG, "Unknown led strip event: %d", device_state);
             return;
     }
 }
+
 
 void CircularStrip::FlashOnce()
 {   

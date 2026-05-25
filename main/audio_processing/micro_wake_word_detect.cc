@@ -55,15 +55,21 @@ void MicroWakeWordDetect::InitializeWakeWordDetect() {
         return;
     }
 
-    detect_task_handle_ = xTaskCreateStaticPinnedToCore(
-        [](void* arg) {
+    // detect_task_handle_ = xTaskCreateStaticPinnedToCore(
+    //     [](void* arg) {
+    //         auto this_ = (MicroWakeWordDetect*)arg;
+    //         this_->DetectionTask();
+    //         vTaskDelete(nullptr);
+    //     },
+    //     "micro_wake_task", MICRO_WW_TASK_STACK_WORDS, this, MICRO_WW_TASK_PRIORITY,
+    //     detect_task_stack_, &detect_task_buffer_, MICRO_WW_TASK_CORE);
+        xTaskCreate([](void* arg) {
             auto this_ = (MicroWakeWordDetect*)arg;
             this_->DetectionTask();
             vTaskDelete(nullptr);
         },
         "micro_wake_task", MICRO_WW_TASK_STACK_WORDS, this, MICRO_WW_TASK_PRIORITY,
-        detect_task_stack_, &detect_task_buffer_, MICRO_WW_TASK_CORE);
-
+        &detect_task_handle_);
     if (detect_task_handle_ == nullptr) {
         ESP_LOGE(TAG, "Failed to create micro wake task");
         return;

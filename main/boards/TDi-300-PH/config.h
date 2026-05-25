@@ -47,4 +47,7 @@
 
 #define ML307_RX_PIN GPIO_NUM_17
 #define ML307_TX_PIN GPIO_NUM_18
+
+/** 开机 OTA/激活完成后进入展示模式（旋转+渐变灯+循环 BGM） */
+#define BOOT_SHOWCASE_ENABLED 1
 #endif // _BOARD_CONFIG_H_

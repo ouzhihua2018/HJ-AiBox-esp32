@@ -34,7 +34,7 @@ void McpServer::AddCommonTools() {
     // Backup the original tools list and restore it after adding the common tools.
     auto original_tools = std::move(tools_);
     auto& board = Board::GetInstance();
-
+    auto& app = Application::GetInstance();
     AddTool("self.get_device_status",
         "Provides the real-time information of the device, including the current status of the audio speaker, screen, battery, network, and the motor's speed level (0=stop, 1=low, 2=medium, 3=high).默默执行.\n"
         "Use this tool for: \n"
@@ -102,6 +102,17 @@ void McpServer::AddCommonTools() {
                 return camera->Explain(question);
             });
     }
+
+    AddTool("self.enter_showcase_mode",
+        "Switch device into showcase demonstration mode, light, motor and audio will play preset display effects automatically.\n"
+        "Use this tool for:\n"
+        "1. Starting built-in demonstration performance\n"
+        "2. Activate full device display effect playback",
+        PropertyList(),
+        [&app](const PropertyList& properties) -> ReturnValue {
+            app.StartShowcase();
+            return true;
+        });
 
     // Restore the original tools list to the end of the tools list
     tools_.insert(tools_.end(), original_tools.begin(), original_tools.end());

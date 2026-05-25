@@ -1,4 +1,9 @@
 **编译流程**:位于项目CMAKELISTS目录中，Set-target esp32s3，随后idf.py menuconfig选择要变更内容(底座默认不需要任何更改)，随后build编译。由于添加了唤醒词components组件，导致原有的管理组件依赖混乱，每次重新编译需手动在管理组件opus-encoder中添加REQUIRES 78__esp-opus。    78 ml307_mqtt 手动添加connected_ = true;  
+if (type == "conn") {
+                    if (arguments[2].int_value == 0) {
+                        connected_ = true;
+                        xEventGroupSetBits(event_group_handle_, MQTT_CONNECTED_EVENT);
+                    } 
 以及通过减小心跳包频率和不清除会话来防止MQTT断开，ML307_MQTT修改为
     // Set clean session
     if (!modem_.Command(std::string("AT+MQTTCFG=\"clean\",") + std::to_string(mqtt_id_) + ",0")) {
@@ -11,11 +16,7 @@
         ESP_LOGE(TAG, "Failed to set MQTT keep alive");
         return false;
     }
-if (type == "conn") {
-                    if (arguments[2].int_value == 0) {
-                        connected_ = true;
-                        xEventGroupSetBits(event_group_handle_, MQTT_CONNECTED_EVENT);
-                    } 
+
 若4G无法连接鼎乐MQTT，尝试将MQtt.h 中 int keep_alive_seconds_ = 30;改大
 
 **程序框架**:应用层(application.cc)->板级层(board.cc)->底层驱动层(各种组件)。

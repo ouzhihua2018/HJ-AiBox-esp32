@@ -184,11 +184,14 @@ private:
     {
         boot_button_.OnClick([this]()
                              {
-            //power_save_timer_->WakeUp();
             auto& app = Application::GetInstance();
+            if (app.IsInShowcaseMode()) {
+                ESP_LOGI(TAG, "BOOT: exit showcase");
+                app.ExitShowcase();
+                return;
+            }
             ESP_LOGE(TAG,"BOOT BUTTON");
             app.ToggleChatState();
-
              });
 
         // boot_button_.OnLongPress([this]()
@@ -328,6 +331,18 @@ public:
     virtual void StopLedWork() override
     {
         wby_led_.stopwbyled();
+    }
+    virtual void OnEnterShowcaseMode() override
+    {
+        motor_.SetSpeedLevel(2);
+        wby_led_.SetEffect("crossfade", 50, 85);
+        //GetLed2()->OnStateChangedLed2();
+    }
+    virtual void OnExitShowcaseMode() override
+    {
+        StopMotorWork();
+        StopLedWork();
+        GetLed2()->OnStateChangedLed2();
     }
     virtual Led *GetLed() override
     {

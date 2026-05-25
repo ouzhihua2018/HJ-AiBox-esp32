@@ -46,6 +46,8 @@ public:
     void stopwbyled();
     bool IsLedOn() const;
     bool GetLedState(std::string& effect, int& speed_ms, int& intensity, int& white, int& yellow, int& blue);
+    /** effect: marquee | crossfade | none/off */
+    bool SetEffect(const std::string& effect, int speed_ms = 50, int intensity = 80);
     void OnLedStateChanged(std::function<void(bool on)> callback);
     void Initwbyled(gpio_num_t motor_pwm_gpio, gpio_num_t motor_pwm2_gpio);
 };

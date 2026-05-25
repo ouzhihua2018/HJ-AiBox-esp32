@@ -127,7 +127,7 @@ void motor::InitMotor(gpio_num_t MOTOR_PWM_GPIO, gpio_num_t MOTOR_PWM2_GPIO)
                            return true;
                        });
 }
-
+#ifndef WBY_STYLE
 void motor::InitMotorProtect()
 {
     esp_timer_create_args_t motor_protect_args = {
@@ -195,7 +195,39 @@ void motor::InitAngleDetecter()
 
     esp_timer_create(&angle_timer_args, &angle_read_timer_handle_);
 }
+#endif
 
+void motor::InitMotorProtect()
+{
+    adc_oneshot_unit_init_cfg_t init_config1{};
+    init_config1.clk_src = ADC_RTC_CLK_SRC_RC_FAST;
+    init_config1.unit_id = ADC_UNIT_1;
+    init_config1.ulp_mode = ADC_ULP_MODE_DISABLE;
+    adc_oneshot_new_unit(&init_config1, &adc1_handle_);
+
+    adc_oneshot_chan_cfg_t adc1_config{};
+    adc1_config.bitwidth = ADC_BITWIDTH_DEFAULT;
+    adc1_config.atten = ADC_ATTEN_DB_12;
+    adc_oneshot_config_channel(adc1_handle_, ADC_CHANNEL_3, &adc1_config);
+
+    esp_timer_create_args_t angle_timer_args = {
+        .callback = [](void *arg)
+        {
+            motor *this_ = (motor *)arg;
+            int adc_raw;
+            if (adc_oneshot_read(this_->adc1_handle_, ADC_CHANNEL_3, &adc_raw) != ESP_OK) return;
+            ESP_LOGI(TAG,"当前采样电阻AD值:");
+
+            
+        },
+        .arg = this,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "angle_timer",
+        .skip_unhandled_events = true
+    };
+
+    esp_timer_create(&angle_timer_args, &angle_read_timer_handle_);
+}
 int motor::GetSpeed()
 {
     int current_pwm = 0;
