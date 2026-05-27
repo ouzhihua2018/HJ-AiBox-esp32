@@ -190,7 +190,10 @@ private:
                 app.ExitShowcase();
                 return;
             }
-            ESP_LOGE(TAG,"BOOT BUTTON");
+            ESP_LOGW(TAG,"BOOT BUTTON");
+            if(app.background_audio_stream_){
+                app.SetBackgroundAudioStreamActive(false);
+            }
             app.ToggleChatState();
              });
 

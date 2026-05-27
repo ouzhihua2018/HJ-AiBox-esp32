@@ -93,9 +93,13 @@ public:
     void SetAecMode(AecMode mode);
     AecMode GetAecMode() const { return aec_mode_; }
     BackgroundTask* GetBackgroundTask() const { return background_task_; }
+    void SetBackgroundAudioStreamActive(bool active);
+    
     std::unique_ptr<WakeWord> wake_word_;
     std::unique_ptr<MicroWakeWordDetect> micro_wake_word_;
     std::unique_ptr<AudioDebugger> audio_debugger_;
+    bool background_audio_stream_ = false;
+    
 private:
     Application();
     ~Application();
@@ -118,6 +122,8 @@ private:
     bool aborted_ = false;
     bool voice_detected_ = false;
     bool busy_decoding_audio_ = false;
+    /** 后台纯播放（StartAudioStream），关闭拾音且禁止打断 */
+    
     std::string_view showcase_sound_;
     size_t showcase_sound_offset_ = 0;
     static constexpr size_t kShowcaseQueueLowWater = 8;
@@ -157,7 +163,10 @@ private:
     void AudioLoop();
     void EnqueueP3Frames(const std::string_view& sound, size_t& offset, size_t max_frames);
     void FeedShowcaseAudioIfNeeded();
+    void ApplyBackgroundAudioStreamMute();
+    void RestoreAudioInputAfterBackgroundStream();
     
+
     // 音频能量计算相关函数
     float CalculateAudioRMS(const std::vector<int16_t>& audio_data);
     void UpdateLedWithAudioLevel(float rms_value);

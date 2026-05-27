@@ -288,6 +288,9 @@ void Application::RequestLowBatteryHalt() {
         if (device_state_ == kDeviceStateShowcase) {
             ExitShowcase();
         }
+        if (background_audio_stream_) {
+            SetBackgroundAudioStreamActive(false);
+        }
         if (protocol_ && protocol_->IsAudioChannelOpened()) {
             protocol_->CloseAudioChannel();
         }
@@ -642,6 +645,8 @@ void Application::Start() {
                     if (device_state_ == kDeviceStateLowBattery) {
                         return;
                     }
+                    // 新一轮播报开始前清除上一段后台纯播放的关麦状态
+                    SetBackgroundAudioStreamActive(false);
                     aborted_ = false;
                     if (device_state_ == kDeviceStateIdle || device_state_ == kDeviceStateListening) {
                         SetDeviceState(kDeviceStateSpeaking);
@@ -663,6 +668,11 @@ void Application::Start() {
                             SetDeviceState(kDeviceStateListening);
                         }
                     }
+                    // 后台播歌结束与 TTS 结束同为 tts stop，在此恢复麦克风
+                    if (background_audio_stream_) {
+                        ESP_LOGI(TAG, "tts stop ends background audio stream, restore mic");
+                    }
+                    SetBackgroundAudioStreamActive(false);
                 });
             } else if (strcmp(state->valuestring, "sentence_start") == 0) {
                 auto text = cJSON_GetObjectItem(root, "text");
@@ -720,6 +730,18 @@ void Application::Start() {
                     ESP_LOGW(TAG, "Unknown system command: %s", command->valuestring);
                 }
             }
+        } else if (strcmp(type->valuestring, "StartAudioStream") == 0) {
+            Schedule([this]() {
+                if (device_state_ == kDeviceStateLowBattery) {
+                    return;
+                }
+                ESP_LOGI(TAG, "StartAudioStream");
+                if (device_state_ == kDeviceStateIdle || device_state_ == kDeviceStateListening) {
+                    aborted_ = false;
+                    SetDeviceState(kDeviceStateSpeaking);
+                }
+                SetBackgroundAudioStreamActive(true);
+            });
         } else if (strcmp(type->valuestring, "alert") == 0) {
             if (device_state_ == kDeviceStateLowBattery) {
                 return;
@@ -866,7 +888,9 @@ void Application::Start() {
                 vTaskDelay(pdMS_TO_TICKS(60));
                 SetListeningMode(aec_mode_ == kAecOff ? kListeningModeAutoStop : kListeningModeRealtime);
             } else if (device_state_ == kDeviceStateSpeaking) {
-                AbortSpeaking(kAbortReasonWakeWordDetected);
+                if (!background_audio_stream_) {
+                    AbortSpeaking(kAbortReasonWakeWordDetected);
+                }
             } else if (device_state_ == kDeviceStateActivating) {
                 SetDeviceState(kDeviceStateIdle);
             }
@@ -1169,7 +1193,67 @@ bool Application::ReadAudio(std::vector<int16_t>& data, int sample_rate, int sam
     return true;
 }
 
+void Application::ApplyBackgroundAudioStreamMute() {
+    //auto codec = Board::GetInstance().GetAudioCodec();
+    audio_processor_->Stop();
+    // wake_word_->StopDetection();
+    // micro_wake_word_->Stop();
+    // codec->EnableInput(false);
+}
+
+void Application::RestoreAudioInputAfterBackgroundStream() {
+
+    audio_processor_->Start();
+    // auto codec = Board::GetInstance().GetAudioCodec();
+    // codec->EnableInput(true);
+    // switch (device_state_) {
+    // case kDeviceStateIdle:
+    //     if (!micro_wake_word_->IsRunning()) {
+    //         micro_wake_word_->StartDetection();
+    //     }
+    //     if (protocol_ && !protocol_->IsAudioChannelOpened()) {
+    //         wake_word_->StartDetection();
+    //     }
+    //     break;
+    // case kDeviceStateListening:
+    //     if (!audio_processor_->IsRunning()) {
+    //         audio_processor_->Start();
+    //     }
+    //     break;
+    // case kDeviceStateSpeaking:
+    //     if (listening_mode_ == kListeningModeRealtime) {
+    //         if (!audio_processor_->IsRunning()) {
+    //             audio_processor_->Start();
+    //         }
+    //     } else if (!micro_wake_word_->IsRunning()) {
+    //         micro_wake_word_->StartDetection();
+    //         wake_word_->StartDetection();
+    //     }
+    //     break;
+    // default:
+    //     break;
+    //}
+}
+
+void Application::SetBackgroundAudioStreamActive(bool active) {
+    if (background_audio_stream_ == active) {
+        return;
+    }
+    background_audio_stream_ = active;
+    if (active) {
+        ESP_LOGI(TAG, "Background audio stream: mute mic, disable interrupt");
+        ApplyBackgroundAudioStreamMute();
+    } else {
+        ESP_LOGI(TAG, "Background audio stream ended: restore mic");
+        RestoreAudioInputAfterBackgroundStream();
+    }
+}
+
 void Application::AbortSpeaking(AbortReason reason) {
+    if (background_audio_stream_) {
+        ESP_LOGI(TAG, "AbortSpeaking ignored during background audio stream");
+        return;
+    }
     ESP_LOGI(TAG, "Abort speaking");
     aborted_ = true;
     protocol_->SendAbortSpeaking(reason);
@@ -1250,12 +1334,12 @@ void Application::SetDeviceState(DeviceState state) {
             break;
         case kDeviceStateSpeaking:
             display->SetStatus(Lang::Strings::SPEAKING);
-            //由于鼎乐并不支持实时模式，暂时屏蔽这条判断
-            if (listening_mode_ != kListeningModeRealtime) {
+            if (background_audio_stream_) {
+                ApplyBackgroundAudioStreamMute();
+            } else if (listening_mode_ != kListeningModeRealtime) {
                 ESP_LOGI(TAG,"非实时模式");
                 audio_processor_->Stop();
                 ESP_LOGI(TAG,"Speaking STATE ");
-                // Only AFE wake word can be detected in speaking mode 
                 if(!micro_wake_word_->IsRunning()){
                     ESP_LOGI(TAG,"MICRO START DETECT");
                     micro_wake_word_->StartDetection();
@@ -1423,6 +1507,9 @@ void Application::WakeWordInvoke(const std::string& wake_word) {
             }
         }); 
     } else if (device_state_ == kDeviceStateSpeaking) {
+        if (background_audio_stream_) {
+            return;
+        }
         Schedule([this]() {
             AbortSpeaking(kAbortReasonNone);
         });
