@@ -35,6 +35,7 @@ private:
     // void SlowDown();
     // void SetPwm(int pwm);
     std::function<void(bool)> on_reset_callback_;
+    int stall_count_ = 0;
 public:
     motor();
     ~motor();

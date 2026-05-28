@@ -5,7 +5,10 @@
 #define SPEED_LOW       1
 #define SPEED_MEDIUM    2
 #define SPEED_HIGH      3
-
+//使用采样电阻检测
+#define Angle_DETECT_INTERVAL_MS    2000
+#define STALL_ADC_THRESHOLD      450
+//使用角度传感器检测
 #define STALL_CHECK_INTERVAL_MS      2000   //1000ms 监测一次堵转
 #define STALL_ANGLE_THRESHOLD        3.0f
 #define STALL_CONSECUTIVE_TIMES      3
@@ -51,8 +54,8 @@ void motor::InitMotor(gpio_num_t MOTOR_PWM_GPIO, gpio_num_t MOTOR_PWM2_GPIO)
     ledc_conf.channel = LEDC_CHANNEL_2;
     ledc_conf.gpio_num = MOTOR_PWM2_GPIO;
     ledc_channel_config(&ledc_conf);
-#ifndef WBY_STYLE
     InitAngleDetecter();
+#ifndef WBY_STYLE
     InitMotorProtect();
 #endif
     auto &mcp_server = McpServer::GetInstance();
@@ -195,9 +198,8 @@ void motor::InitAngleDetecter()
 
     esp_timer_create(&angle_timer_args, &angle_read_timer_handle_);
 }
-#endif
-
-void motor::InitMotorProtect()
+#else
+void motor::InitAngleDetecter()
 {
     adc_oneshot_unit_init_cfg_t init_config1{};
     init_config1.clk_src = ADC_RTC_CLK_SRC_RC_FAST;
@@ -207,7 +209,7 @@ void motor::InitMotorProtect()
 
     adc_oneshot_chan_cfg_t adc1_config{};
     adc1_config.bitwidth = ADC_BITWIDTH_DEFAULT;
-    adc1_config.atten = ADC_ATTEN_DB_12;
+    adc1_config.atten = ADC_ATTEN_DB_0;
     adc_oneshot_config_channel(adc1_handle_, ADC_CHANNEL_3, &adc1_config);
 
     esp_timer_create_args_t angle_timer_args = {
@@ -216,9 +218,13 @@ void motor::InitMotorProtect()
             motor *this_ = (motor *)arg;
             int adc_raw;
             if (adc_oneshot_read(this_->adc1_handle_, ADC_CHANNEL_3, &adc_raw) != ESP_OK) return;
-            ESP_LOGI(TAG,"当前采样电阻AD值:");
-
-            
+            if(adc_raw>=STALL_ADC_THRESHOLD){
+                this_->stall_count_ ++ ;
+                if((this_->stall_count_)>=STALL_CONSECUTIVE_TIMES){
+                    ESP_LOGI(TAG,"STALL TRIGGER!");
+                    this_->SetSpeedLevel(SPEED_STOP);
+                }
+            } else this_->stall_count_ = 0;  
         },
         .arg = this,
         .dispatch_method = ESP_TIMER_TASK,
@@ -228,6 +234,9 @@ void motor::InitMotorProtect()
 
     esp_timer_create(&angle_timer_args, &angle_read_timer_handle_);
 }
+#endif
+
+
 int motor::GetSpeed()
 {
     int current_pwm = 0;
@@ -273,6 +282,24 @@ void motor::SetSpeedLevel(int level)
     {
         if (!esp_timer_is_active(motor_protect_timer_handle_))
             esp_timer_start_periodic(motor_protect_timer_handle_, STALL_CHECK_INTERVAL_MS * 1000);
+    }
+#else
+    if (level == SPEED_STOP)
+    {   
+        if (esp_timer_is_active(angle_read_timer_handle_)){
+            ESP_LOGI(TAG,"停止角度检测定时器");
+            esp_timer_stop(angle_read_timer_handle_);
+            stall_count_ = 0;
+        }
+            
+    }
+    else
+    {
+        if (!esp_timer_is_active(angle_read_timer_handle_)){
+            ESP_LOGI(TAG,"启动角度检测定时器");
+            esp_timer_start_periodic(angle_read_timer_handle_, Angle_DETECT_INTERVAL_MS * 1000);
+        }
+            
     }
 #endif
 }
