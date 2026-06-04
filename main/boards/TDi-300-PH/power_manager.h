@@ -198,7 +198,7 @@ private:
 
     uint8_t GetEffectiveBatteryLevelForPolicy() const {
         int level = static_cast<int>(battery_level_);
-        if (IsWbyLedOn()) {
+        if (IsWbyLedOn()&&(!is_charging_)) {
             if(level<=30){
                 level = std::min(100, level + kWbyLedBatteryCompensation);
             } else {
