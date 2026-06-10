@@ -7,6 +7,8 @@
 
 #include <esp_log.h>
 #include <esp_timer.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 #include <ml307_http.h>
 #include <ml307_ssl_transport.h>
 #include <web_socket.h>
@@ -65,8 +67,19 @@ void Ml307Board::WaitForNetworkReady() {
     ESP_LOGI(TAG, "ML307 IMEI: %s", imei.c_str());
     ESP_LOGI(TAG, "ML307 ICCID: %s", iccid.c_str());
 
-    // Close all previous connections
+    PrepareNetworkStack();
+}
+
+void Ml307Board::PrepareNetworkStack() {
     modem_.ResetConnections();
+    modem_.ConfigureDns();
+
+    ESP_LOGI(TAG, "等待 DNS 服务就绪 (3s)...");
+    vTaskDelay(pdMS_TO_TICKS(3000));
+
+    if (!modem_.WarmupDns("www.baidu.com", 15000)) {
+        ESP_LOGW(TAG, "通用 DNS 预热失败，继续启动");
+    }
 }
 
 Http* Ml307Board::CreateHttp() {

@@ -16,7 +16,7 @@ if (type == "conn") {
         ESP_LOGE(TAG, "Failed to set MQTT keep alive");
         return false;
     }
-
+请更换管理组件的ml307_http.cc
 若4G无法连接鼎乐MQTT，尝试将MQtt.h 中 int keep_alive_seconds_ = 30;改大
 
 **程序框架**:应用层(application.cc)->板级层(board.cc)->底层驱动层(各种组件)。

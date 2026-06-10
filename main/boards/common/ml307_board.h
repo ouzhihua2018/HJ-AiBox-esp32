@@ -9,6 +9,7 @@ protected:
     Ml307AtModem modem_;
     virtual std::string GetBoardJson() override;
     void WaitForNetworkReady();
+    void PrepareNetworkStack();
 
 public:
     Ml307Board(gpio_num_t tx_pin, gpio_num_t rx_pin, size_t rx_buffer_size = 8192);
