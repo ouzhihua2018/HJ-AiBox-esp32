@@ -36,7 +36,7 @@ void Ml307Board::StartNetwork() {
 
     // If low power, the material ready event will be triggered by the modem because of a reset
     modem_.OnMaterialReady([this, &application]() {
-        ESP_LOGI(TAG, "ML307 material ready");
+        ESP_LOGI(TAG, "!!!!!!ML307 material ready!!!!!!");
         application.Schedule([this, &application]() {
             application.SetDeviceState(kDeviceStateIdle);
             WaitForNetworkReady();
