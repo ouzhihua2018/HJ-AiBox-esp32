@@ -141,7 +141,7 @@ void Application::CheckNewVersion() {
             ESP_LOGW(TAG, "Check new version failed, retry in %d seconds (%d/%d)", retry_delay, retry_count, MAX_RETRY);
             for (int i = 0; i < retry_delay; i++) {
                 vTaskDelay(pdMS_TO_TICKS(1000));
-                if (device_state_ == kDeviceStateIdle) {
+                if (device_state_ == kDeviceStateListening) {
                     break;
                 }
             }
@@ -219,7 +219,7 @@ void Application::CheckNewVersion() {
             } else {
                 vTaskDelay(pdMS_TO_TICKS(10000));
             }
-            if (device_state_ == kDeviceStateIdle) {
+            if (device_state_ == kDeviceStateListening) {
                 break;
             }
         }
@@ -272,9 +272,9 @@ void Application::Alert(const char* status, const char* message, const char* emo
 }
 
 void Application::DismissAlert() {
-    if (device_state_ == kDeviceStateIdle) {
+    if (device_state_ == kDeviceStateListening) {
         auto display = Board::GetInstance().GetDisplay();
-        display->SetStatus(Lang::Strings::STANDBY);
+        display->SetStatus(Lang::Strings::LISTENING);
         display->SetEmotion("neutral");
         display->SetChatMessage("system", "");
     }
@@ -437,7 +437,7 @@ void Application::ToggleChatState() {
         return;
     }
     if (device_state_ == kDeviceStateActivating) {
-        SetDeviceState(kDeviceStateIdle);
+        EnterAlwaysListening();
         return;
     }
 
@@ -446,24 +446,16 @@ void Application::ToggleChatState() {
         return;
     }
 
-    if (device_state_ == kDeviceStateIdle) {
+    if (device_state_ == kDeviceStateListening) {
         Schedule([this]() {
             if (!protocol_->IsAudioChannelOpened()) {
-                SetDeviceState(kDeviceStateConnecting);
-                if (!protocol_->OpenAudioChannel()) {
-                    return;
-                }
+                EnterAlwaysListening();
             }
-            SetListeningMode(aec_mode_ == kAecOff ? kListeningModeAutoStop : kListeningModeRealtime);
         });
     } else if (device_state_ == kDeviceStateSpeaking) {
         Schedule([this]() {
             ESP_LOGE(TAG,"ToggleChatState abort");
             AbortSpeaking(kAbortReasonNone);
-        });
-    } else if (device_state_ == kDeviceStateListening) {
-        Schedule([this]() {
-            protocol_->CloseAudioChannel();
         });
     }
 }
@@ -473,7 +465,7 @@ void Application::StartListening() {
         return;
     }
     if (device_state_ == kDeviceStateActivating) {
-        SetDeviceState(kDeviceStateIdle);
+        EnterAlwaysListening();
         return;
     }
 
@@ -482,16 +474,13 @@ void Application::StartListening() {
         return;
     }
     
-    if (device_state_ == kDeviceStateIdle) {
+    if (device_state_ == kDeviceStateListening) {
         Schedule([this]() {
             if (!protocol_->IsAudioChannelOpened()) {
-                SetDeviceState(kDeviceStateConnecting);
-                if (!protocol_->OpenAudioChannel()) {
-                    return;
-                }
+                EnterAlwaysListening();
+            } else if (!audio_processor_->IsRunning()) {
+                SetListeningMode(kListeningModeManualStop);
             }
-
-            SetListeningMode(kListeningModeManualStop);
         });
     } else if (device_state_ == kDeviceStateSpeaking) {
         Schedule([this]() {
@@ -503,10 +492,9 @@ void Application::StartListening() {
 }
 
 void Application::StopListening() {
-    const std::array<int, 3> valid_states = {
+    const std::array<int, 2> valid_states = {
         kDeviceStateListening,
         kDeviceStateSpeaking,
-        kDeviceStateIdle,
     };
     // If not valid, do nothing
     if (std::find(valid_states.begin(), valid_states.end(), device_state_) == valid_states.end()) {
@@ -516,7 +504,11 @@ void Application::StopListening() {
     Schedule([this]() {
         if (device_state_ == kDeviceStateListening) {
             protocol_->SendStopListening();
-            SetDeviceState(kDeviceStateIdle);
+            if (protocol_->IsAudioChannelOpened() && audio_processor_->IsRunning()) {
+                protocol_->SendStartListening(listening_mode_);
+            } else {
+                EnterAlwaysListening();
+            }
         }
     });
 }
@@ -661,8 +653,8 @@ void Application::Start() {
                     background_task_->WaitForCompletion();
                     if (device_state_ == kDeviceStateSpeaking) {
                         if (listening_mode_ == kListeningModeManualStop) {
-                            ESP_LOGI(TAG, "tts stop,set idel state");
-                            SetDeviceState(kDeviceStateIdle);
+                            ESP_LOGI(TAG, "tts stop, re-enter always listening");
+                            EnterAlwaysListening();
                         } else {
                             ESP_LOGI(TAG, "tts stop,set listening state");
                             SetDeviceState(kDeviceStateListening);
@@ -819,6 +811,7 @@ void Application::Start() {
             }
         }
         background_task_->Schedule([this, data = std::move(data)]() mutable {
+            //ESP_LOGI(TAG,"背景任务添加opus编码任务");
             opus_encoder_->Encode(std::move(data), [this](std::vector<uint8_t>&& opus) {
                 AudioStreamPacket packet;
                 packet.payload = std::move(opus);
@@ -874,11 +867,10 @@ void Application::Start() {
             if (!protocol_) {
                 return;
             }
-            if (device_state_ == kDeviceStateIdle) {
+            if (device_state_ == kDeviceStateListening) {
                 if (!protocol_->IsAudioChannelOpened()) {
                     SetDeviceState(kDeviceStateConnecting);
                     if (!protocol_->OpenAudioChannel()) {
-                        //micro_wake_word_->StartDetection();
                         wake_word_->StartDetection();
                         return;
                     }
@@ -892,7 +884,7 @@ void Application::Start() {
                     AbortSpeaking(kAbortReasonWakeWordDetected);
                 }
             } else if (device_state_ == kDeviceStateActivating) {
-                SetDeviceState(kDeviceStateIdle);
+                EnterAlwaysListening();
             }
         });
     }
@@ -920,12 +912,13 @@ void Application::Start() {
         PlaySound(Lang::Sounds::P3_SUCCESS);
     }
     vTaskDelay(pdMS_TO_TICKS(200));
-    SetDeviceState(kDeviceStateIdle);
+    EnterAlwaysListening();
 #endif
     // Print heap stats
     SystemInfo::PrintHeapStats();
     //start_core1_monitor();
     // Enter the main event loop
+    ESP_LOGI(TAG,"进入主事件循环");
     MainEventLoop(); //经过AFE处理后的音频发送任务和主要调度任务
 }
 
@@ -943,7 +936,7 @@ void Application::OnClockTimer() {
 
         // If we have synchronized server time, set the status to clock "HH:MM" if the device is idle
         if (ota_.HasServerTime()) {
-            if (device_state_ == kDeviceStateIdle) {
+            if (device_state_ == kDeviceStateListening) {
                 Schedule([this]() {
                     // Set status to clock "HH:MM"
                     time_t now = time(NULL);
@@ -1120,8 +1113,8 @@ void Application::OnAudioInput() {
     if (wake_word_->IsDetectionRunning()) {
         std::vector<int16_t> data;
         int samples = wake_word_->GetFeedSize();  //512*2 = 1024个采样点 1个采样点2byte
+        //ESP_LOGI(TAG,"wake_word feed!!!");
         if (samples > 0) {
-            //ESP_LOGI(TAG,"samples :%d",samples);
             if (ReadAudio(data, 16000, samples)) {
                 wake_word_->Feed(data);
                 return;
@@ -1133,7 +1126,7 @@ void Application::OnAudioInput() {
     if (audio_processor_->IsRunning()) {
         std::vector<int16_t> data;
         int samples = audio_processor_->GetFeedSize();//由于初始化时是MR，那feedsize应该是512*2
-        
+        //ESP_LOGI(TAG,"audio_processor feed!!!");
         if (samples > 0) {
             if (ReadAudio(data, 16000, samples)) {
                 audio_processor_->Feed(data);
@@ -1264,7 +1257,35 @@ void Application::SetListeningMode(ListeningMode mode) {
     SetDeviceState(kDeviceStateListening);
 }
 
+void Application::EnterAlwaysListening() {
+    if (!protocol_) {
+        return;
+    }
+    if (device_state_ == kDeviceStateLowBattery || device_state_ == kDeviceStateShowcase) {
+        return;
+    }
+    if (device_state_ == kDeviceStateListening &&
+        protocol_->IsAudioChannelOpened() &&
+        audio_processor_->IsRunning()) {
+        return;
+    }
+    if (!protocol_->IsAudioChannelOpened()) {
+        if (device_state_ != kDeviceStateConnecting) {
+            SetDeviceState(kDeviceStateConnecting);
+        }
+        if (!protocol_->OpenAudioChannel()) {
+            ESP_LOGW(TAG, "EnterAlwaysListening: OpenAudioChannel failed");
+            return;
+        }
+    }
+    SetListeningMode(aec_mode_ == kAecOff ? kListeningModeAutoStop : kListeningModeRealtime);
+}
+
 void Application::SetDeviceState(DeviceState state) {
+    if (state == kDeviceStateIdle) {
+        EnterAlwaysListening();
+        return;
+    }
     if (device_state_ == state) {
         return;
     }
@@ -1313,8 +1334,12 @@ void Application::SetDeviceState(DeviceState state) {
 #endif
             // Make sure the audio processor is running
             if (!audio_processor_->IsRunning()) {
-                // Send the start listening command
-                protocol_->SendStartListening(listening_mode_);
+                ESP_LOGW(TAG,"音频处理器未运行");
+                if (protocol_->IsAudioChannelOpened()) {
+                    protocol_->SendStartListening(listening_mode_);
+                } else {
+                    ESP_LOGW(TAG, "Skip SendStartListening: audio channel not open");
+                }
                 if (previous_state == kDeviceStateSpeaking) {
                     audio_decode_queue_.clear();
                     audio_decode_cv_.notify_all();
@@ -1498,26 +1523,20 @@ void Application::WakeWordInvoke(const std::string& wake_word) {
     if (device_state_ == kDeviceStateLowBattery) {
         return;
     }
-    if (device_state_ == kDeviceStateIdle) {
-        ESP_LOGE(TAG,":WakeWordInvoke");
-        ToggleChatState();
+    if (device_state_ == kDeviceStateListening) {
         Schedule([this, wake_word]() {
-            if (protocol_) {
-                protocol_->SendWakeWordDetected(wake_word); 
+            if (!protocol_->IsAudioChannelOpened()) {
+                EnterAlwaysListening();
+                return;
             }
-        }); 
+            protocol_->SendWakeWordDetected(wake_word);
+        });
     } else if (device_state_ == kDeviceStateSpeaking) {
         if (background_audio_stream_) {
             return;
         }
         Schedule([this]() {
             AbortSpeaking(kAbortReasonNone);
-        });
-    } else if (device_state_ == kDeviceStateListening) {   
-        Schedule([this]() {
-            if (protocol_) {
-                protocol_->CloseAudioChannel();
-            }
         });
     }
 }

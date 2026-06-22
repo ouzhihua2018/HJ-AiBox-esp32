@@ -109,7 +109,7 @@ void AfeAudioProcessor::AudioProcessorTask() {
     Application& app = Application::GetInstance();
     while (true) {
         xEventGroupWaitBits(event_group_, PROCESSOR_RUNNING, pdFALSE, pdTRUE, portMAX_DELAY);
-
+        //ESP_LOGI(TAG,"AudioProcessorTask running!!!");
         auto res = afe_iface_->fetch_with_delay(afe_data_, portMAX_DELAY);
         if ((xEventGroupGetBits(event_group_) & PROCESSOR_RUNNING) == 0) {
             continue;
@@ -124,11 +124,11 @@ void AfeAudioProcessor::AudioProcessorTask() {
         // VAD state change
         if (vad_state_change_callback_) {
             if (res->vad_state == VAD_SPEECH && !is_speaking_) {
-                ESP_LOGI(TAG,"AFE已检测到人声");
+                //ESP_LOGI(TAG,"AFE已检测到人声");
                 is_speaking_ = true;
                 vad_state_change_callback_(true);
             } else if (res->vad_state == VAD_SILENCE && is_speaking_) {
-                ESP_LOGI(TAG,"AFE没有检测到人声");
+                //ESP_LOGI(TAG,"AFE没有检测到人声");
                 is_speaking_ = false;
                 vad_state_change_callback_(false);
             }

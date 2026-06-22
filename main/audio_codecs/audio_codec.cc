@@ -42,7 +42,7 @@ void AudioCodec::Start() {
         ESP_LOGW(TAG, "Output volume value (%d) is too small, setting to default (10)", output_volume_);
         output_volume_ = 10;
     }
-    //output_volume_ = 50;
+    output_volume_ = 10;
     ESP_ERROR_CHECK(i2s_channel_enable(tx_handle_));
     ESP_ERROR_CHECK(i2s_channel_enable(rx_handle_));
 
@@ -52,11 +52,11 @@ void AudioCodec::Start() {
 }
 
 void AudioCodec::SetOutputVolume(int volume) {  
-    // if(volume>=60){
-    //     volume=60;
-    // }
+    
+    volume=10;
+    
     output_volume_ = volume;
-    ESP_LOGI(TAG, "Set output volume to %d", output_volume_);
+    ESP_LOGE(TAG, "Set output volume to %d", output_volume_);
     
     Settings settings("audio", true);
     settings.SetInt("output_volume", output_volume_);

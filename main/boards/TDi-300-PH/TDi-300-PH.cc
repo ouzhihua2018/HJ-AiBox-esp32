@@ -25,7 +25,7 @@
 #include "motor.h"
 #include "wbyLED.h"
 #define TAG "TDi-300-PH-MainBoard"
-
+#include "ml307a.h"
 
 
 uint8_t uid[RC522_PICC_UID_SIZE_MAX] = {0};
@@ -40,7 +40,7 @@ static void on_picc_state_changed(void *arg, esp_event_base_t base, int32_t even
     {
         ESP_LOGI(TAG,"RFID 已识别");
         for(int i=0;i<RC522_PICC_UID_SIZE_MAX;i++){
-            if(!(picc->uid.value[i] == uid[i])&&(app.GetDeviceState()==kDeviceStateIdle)){
+            if(!(picc->uid.value[i] == uid[i])&&(app.GetDeviceState()==kDeviceStateListening)){
                 
                 memcpy(uid,picc->uid.value,RC522_PICC_UID_SIZE_MAX);
                 app.CharacterSwitch(uid, RC522_PICC_UID_SIZE_MAX);
@@ -74,7 +74,7 @@ private:
     float target_angle_;
     int current_pwm_ = 0;
     int current_mode_ = 0;
-
+    Ml307A ml307a_;
     void InitializeI2c()
     {
         // Initialize I2C peripheral
@@ -292,7 +292,8 @@ public:
     TDi_300_PH() : DualNetworkBoard(ML307_TX_PIN, ML307_RX_PIN, 8192),
                    boot_button_(BOOT_BUTTON_GPIO),
                    volume_up_button_(VOLUME_UP_BUTTON_GPIO),
-                   volume_down_button_(VOLUME_DOWN_BUTTON_GPIO)
+                   volume_down_button_(VOLUME_DOWN_BUTTON_GPIO),
+                   ml307a_(ML307A_RX_PIN, ML307A_TX_PIN, 8192)
     {
         InitializePowerManager();
         

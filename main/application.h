@@ -160,6 +160,7 @@ private:
     void ShowActivationCode();
     void OnClockTimer();
     void SetListeningMode(ListeningMode mode);
+    void EnterAlwaysListening();
     void AudioLoop();
     void EnqueueP3Frames(const std::string_view& sound, size_t& offset, size_t max_frames);
     void FeedShowcaseAudioIfNeeded();

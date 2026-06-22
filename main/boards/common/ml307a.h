@@ -9,7 +9,12 @@
 #include <freertos/queue.h>
 #include <esp_log.h>
 #include <string>
-
+// #include <cstddef>
+// #include <string>
+// #include <vector>
+// #include <list>
+// #include <functional>
+// #include <mutex>
 #define DEFAULT_UART_NUM UART_NUM_2
 #define DEFAULT_BAUD_RATE 115200
 #define AT_EVENT_DATA_AVAILABLE BIT1
@@ -30,6 +35,7 @@ private:
     TaskHandle_t receive_task_handle_ = nullptr;
     void EventTask();
     void ReceiveTask() ;
+    bool ParseResponse();
 public:
     Ml307A(int tx_pin, int rx_pin, size_t rx_buffer_size);
     ~Ml307A();
