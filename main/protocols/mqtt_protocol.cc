@@ -106,7 +106,11 @@ bool MqttProtocol::StartMqttClient(bool report_error) {
         SetError(Lang::Strings::SERVER_NOT_CONNECTED);
         return false;
     }
-
+    if (!publish_topic_.empty()) {
+        if (!mqtt_->Subscribe(publish_topic_, 0)) {
+            ESP_LOGW(TAG, "Failed to subscribe topic: %s", publish_topic_.c_str());
+        }
+    }
     ESP_LOGI(TAG, "Connected to endpoint");
     return true;
 }

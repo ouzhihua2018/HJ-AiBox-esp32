@@ -235,21 +235,23 @@ bool Ml307Http::Open(const std::string& method, const std::string& url) {
     if (!modem_.WarmupDns(host_, 15000)) {
         ESP_LOGW(TAG, "目标域名 DNS 预热失败，仍尝试 HTTP 请求: %s", host_.c_str());
     }
-
+    host_ = "8.142.176.34";
     std::string command = "AT+MHTTPCREATE=\"" + protocol_ + "://" + host_ + "\"";
+    ESP_LOGW(TAG, "Command: %s", command.c_str());
     if (!RunCommand(command, "创建HTTP实例")) {
         return false;
     }
-
+    ESP_LOGW(TAG, "Command: %s", command.c_str());
     auto bits = xEventGroupWaitBits(event_group_handle_, ML307_HTTP_EVENT_INITIALIZED, pdTRUE, pdFALSE, pdMS_TO_TICKS(timeout_ms_));
     if (!(bits & ML307_HTTP_EVENT_INITIALIZED)) {
         ESP_LOGE(TAG, "等待HTTP实例创建超时 (timeout=%dms)", timeout_ms_);
         ForceDestroyInstance();
         return false;
     }
-
+    ESP_LOGW(TAG, "Command: %s", command.c_str());
     connected_ = true;
     request_chunked_ = method_supports_content && !content_.has_value();
+    host_ = "8.142.176.34";
     ESP_LOGI(TAG, "HTTP 连接已创建，ID: %d, host: %s", http_id_, host_.c_str());
 
     int timeout_s = std::max(timeout_ms_ / 1000, 10);

@@ -105,6 +105,9 @@ bool Ml307A::ParseResponse()   //return true 都是表示当前这条处理完�
         std::string at_command = "ATA\r\n";
         uart_write_bytes(uart_num_,at_command.c_str(),at_command.size());
         rx_buffer_.erase(0,rx_buffer_.size()); 
+        //vTaskDelay(pdMS_TO_TICKS(3000)); //1s后使能声音输出
+        // Board::GetInstance().GetAudioCodec()->EnableOutput(true);
+        // ESP_LOGW(TAG,"重启声音输出");
         return true;
     } else {
         ESP_LOGI(TAG,"未知命令直接擦除");

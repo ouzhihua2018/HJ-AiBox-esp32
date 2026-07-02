@@ -918,6 +918,7 @@ void Application::Start() {
     SystemInfo::PrintHeapStats();
     //start_core1_monitor();
     // Enter the main event loop
+    //codec->EnableOutput(false);
     ESP_LOGI(TAG,"进入主事件循环");
     MainEventLoop(); //经过AFE处理后的音频发送任务和主要调度任务
 }
@@ -1270,6 +1271,7 @@ void Application::EnterAlwaysListening() {
         return;
     }
     if (!protocol_->IsAudioChannelOpened()) {
+        ESP_LOGI(TAG,"重新打开音频通道");
         if (device_state_ != kDeviceStateConnecting) {
             SetDeviceState(kDeviceStateConnecting);
         }

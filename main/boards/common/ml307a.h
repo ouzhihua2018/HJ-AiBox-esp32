@@ -1,6 +1,6 @@
 #ifndef _ML307A_H_
 #define _ML307A_H_
-
+#include "application.h"
 #include <driver/uart.h>
 #include <driver/gpio.h>
 #include <freertos/FreeRTOS.h>
