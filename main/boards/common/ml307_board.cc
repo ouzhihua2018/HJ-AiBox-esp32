@@ -32,7 +32,7 @@ void Ml307Board::StartNetwork() {
     auto& application = Application::GetInstance();
     //application.PlaySound(Lang::Sounds::P3_4G);
     modem_.SetDebug(false);
-    modem_.SetBaudRate(921600);
+    //modem_.SetBaudRate(921600);
 
     // If low power, the material ready event will be triggered by the modem because of a reset
     modem_.OnMaterialReady([this, &application]() {
