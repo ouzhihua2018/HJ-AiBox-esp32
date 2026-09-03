@@ -1,183 +1,58 @@
-menu "Xiaozhi Assistant"
+menu "Daa Voice Terminal"
+
+config DAA_BRINGUP_GATE
+    int "Bring-up gate (0-6 stop there, 7=normal product)"
+    default 1
+    range 0 7
+    help
+        0 = 只上电量电压，RESET 保持低。
+        1 = 出 PCLK 后复位，SPI 读寄存器（默认，PCB 首测）。
+        2 = Gate1 通过后再做 PDL=1 数字回环（1 kHz，不插电话线）。
+        3-6 = 后续关卡，未实现时停在已完成的最后一关。
+        7 = 正常连云产品路径。
 
 config OTA_URL
     string "Default OTA URL"
     default "https://api.tenclass.net/xiaozhi/ota/"
     help
-        The application will access this URL to check for new firmwares and server address.
-
+        OTA check URL used to fetch firmware metadata and MQTT/WebSocket endpoints.
 
 choice
     prompt "Default Language"
     default LANGUAGE_ZH_CN
     help
-        Select device display language
+        Log / Wi-Fi AP language
 
     config LANGUAGE_ZH_CN
         bool "Chinese"
-    config LANGUAGE_ZH_TW
-        bool "Chinese Traditional"
-    config LANGUAGE_EN_US
-        bool "English"
-    config LANGUAGE_JA_JP
-        bool "Japanese"
 endchoice
-
-
-
-choice HJ_ASR_TYPE
-    prompt "ASR_COMMUNICATE_TYPE"
-    default HJ_ASR_LEVEL
-    config HJ_ASR_UART
-        bool "ASR使用UART方式通讯"
-    config HJ_ASR_LEVEL
-        bool "ASR使用高低电平方式通讯"
-endchoice
-
-config ASR_UART_RXD
-    depends on HJ_ASR_UART
-    int "UART RXD pin number"
-    range 1 48
-    default 1
-    help
-        GPIO number for UART RX pin. See UART documentation for more information
-        about available pin numbers for UART.
-
-config ASR_UART_TXD
-    depends on HJ_ASR_UART
-    int "UART TXD pin number"
-    range 1 48
-    default 2
-    help
-        GPIO number for UART TX pin. See UART documentation for more information
-        about available pin numbers for UART.
-
-    
-
-    
-config ASR_LEVEL_GPIO
-    depends on HJ_ASR_LEVEL
-    int "ASR LEVEL GPIO number"
-    range 1 48
-    default 1
-    help
-        GPIO number for ASR level trigger
-
-config LD2410_LEVEL_GPIO
-        depends on BOARD_TYPE_HJ_XIAOZHIAI
-        int "LD2410 LEVEL GPIO number"
-        range 1 48
-        default 44
-        help
-            GPIO number for ASR level trigger
-
-choice DISPLAY_LCD_TYPE
-    prompt "LCD Type"
-    default LCD_ST7789_76X280
-    help
-        屏幕类型选择
-    config LCD_ST7789_240X320
-        bool "ST7789, 分辨率240*320, IPS"
-    config LCD_ST7789_240X320_NO_IPS
-        bool "ST7789, 分辨率240*320, 非IPS"
-    config LCD_ST7789_170X320
-        bool "ST7789, 分辨率170*320"
-    config LCD_ST7789_172X320
-        bool "ST7789, 分辨率172*320"
-    config LCD_ST7789_240X280
-        bool "ST7789, 分辨率240*280"
-    config LCD_ST7789_76X280
-        bool "ST7789, 分辨率76*280"
-    config LCD_ST7789_240X240
-        bool "ST7789, 分辨率240*240"
-    config LCD_ST7789_240X240_7PIN
-        bool "ST7789, 分辨率240*240, 7PIN"
-    config LCD_ST7789_240X135
-        bool "ST7789, 分辨率240*135"
-    config LCD_ST7735_128X160
-        bool "ST7735, 分辨率128*160"
-    config LCD_ST7735_128X128
-        bool "ST7735, 分辨率128*128"
-    config LCD_ST7796_320X480
-        bool "ST7796, 分辨率320*480 IPS"
-    config LCD_ST7796_320X480_NO_IPS
-        bool "ST7796, 分辨率320*480, 非IPS"
-    config LCD_ILI9341_240X320
-        bool "ILI9341, 分辨率240*320"
-    config LCD_ILI9341_240X320_NO_IPS
-        bool "ILI9341, 分辨率240*320, 非IPS"
-    config LCD_GC9A01_240X240
-        bool "GC9A01, 分辨率240*240, 圆屏"
-    config LCD_TYPE_800_1280_10_1_INCH
-        bool "Waveshare 101M-8001280-IPS-CT-K Display"
-    config LCD_TYPE_800_1280_10_1_INCH_A
-        bool "Waveshare 10.1-DSI-TOUCH-A Display"
-    config LCD_TYPE_800_800_3_4_INCH
-        bool "Waveshare ESP32-P4-WIFI6-Touch-LCD-3.4C with 800*800 3.4inch round display"
-    config LCD_TYPE_720_720_4_INCH
-        bool "Waveshare ESP32-P4-WIFI6-Touch-LCD-4C with 720*720 4inch round display"
-    config LCD_CUSTOM
-        bool "自定义屏幕参数"
-endchoice
-
-
-config USE_WECHAT_MESSAGE_STYLE
-    bool "Enable WeChat Message Style"
-    default n
-    help
-        使用微信聊天界面风格
-
-
-config USE_AFE_WAKE_WORD
-    bool "Enable Wake Word Detection (AFE)"
-    default y
-    depends on (IDF_TARGET_ESP32S3 || IDF_TARGET_ESP32P4) && SPIRAM
-    help
-        需要 ESP32 S3 与 PSRAM 支持
-
-config USE_AUDIO_PROCESSOR
-    bool "Enable Audio Noise Reduction"
-    default y
-    depends on (IDF_TARGET_ESP32S3 || IDF_TARGET_ESP32P4) && SPIRAM
-    help
-        需要 ESP32 S3 与 PSRAM 支持
-
-config USE_DEVICE_AEC
-    bool "Enable Device-Side AEC"
-    default y
-    depends on (IDF_TARGET_ESP32S3 || IDF_TARGET_ESP32P4) && SPIRAM
-    help
-        因为性能不够，不建议和微信聊天界面风格同时开启
 
 config USE_SERVER_AEC
-    bool "Enable Server-Side AEC (Unstable)"
+    bool "Enable Server-Side AEC timestamps"
     default n
-    depends on USE_AUDIO_PROCESSOR
     help
-        启用服务器端 AEC，需要服务器支持
+        Attach playback timestamps for server-side AEC.
 
 config USE_AUDIO_DEBUGGER
     bool "Enable Audio Debugger"
     default n
     help
-        启用音频调试功能，直接通过UDP发送音频数据
-        
+        Send uplink PCM over UDP for bring-up.
+
 config AUDIO_DEBUG_UDP_SERVER
     string "Audio Debug UDP Server Address"
     default "192.168.54.70:8000"
     depends on USE_AUDIO_DEBUGGER
     help
-        UDP服务器地址，格式: IP:PORT，用于接收音频调试数据
+        UDP server address, format: IP:PORT
 
 choice IOT_PROTOCOL
     prompt "IoT Protocol"
     default IOT_PROTOCOL_MCP
     help
-        IoT 协议，用于获取设备状态与发送控制指令
+        Device-control protocol exposed to the AI server.
     config IOT_PROTOCOL_MCP
         bool "MCP 2024-11-05"
-    config IOT_PROTOCOL_XIAOZHI
-        bool "Xiaozhi IoT 1.0 (Deprecated)"
 endchoice
 
 endmenu

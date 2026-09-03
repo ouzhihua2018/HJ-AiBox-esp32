@@ -8,6 +8,7 @@
 #include <vector>
 #include <string>
 #include <functional>
+#include <mutex>
 
 #include "board.h"
 

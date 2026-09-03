@@ -7,6 +7,11 @@
 
 #include "application.h"
 #include "system_info.h"
+#include "daa_bringup.h"
+#include "sdkconfig.h"
+
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 #define TAG "main"
 
@@ -24,6 +29,12 @@ extern "C" void app_main(void)
     }
     ESP_ERROR_CHECK(ret);
 
-    // Launch the application
+#if CONFIG_DAA_BRINGUP_GATE < 7
+    DaaBringupRun(CONFIG_DAA_BRINGUP_GATE);
+    while (true) {
+        vTaskDelay(pdMS_TO_TICKS(10000));
+    }
+#else
     Application::GetInstance().Start();
+#endif
 }

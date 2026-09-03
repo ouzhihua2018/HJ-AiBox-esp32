@@ -7,11 +7,14 @@
 #include <esp_timer.h>
 
 #include <string>
+#include <string_view>
 #include <mutex>
 #include <list>
 #include <vector>
 #include <condition_variable>
 #include <memory>
+#include <functional>
+#include <chrono>
 
 #include <opus_encoder.h>
 #include <opus_decoder.h>
@@ -21,15 +24,12 @@
 #include "ota.h"
 #include "background_task.h"
 #include "audio_processor.h"
-#include "micro_wake_word_detect.h"
 #include "audio_debugger.h"
-#include "wake_word.h"
-
 
 #define SCHEDULE_EVENT (1 << 0)
 #define SEND_AUDIO_EVENT (1 << 1)
 #define CHECK_NEW_VERSION_DONE_EVENT (1 << 2)
-#define AUDIO_CHANNEL_OPEN (1 << 3)
+
 enum AecMode {
     kAecOff,
     kAecOnDeviceSide,
@@ -46,12 +46,10 @@ enum DeviceState {
     kDeviceStateSpeaking,
     kDeviceStateUpgrading,
     kDeviceStateActivating,
-    kDeviceStateLowBattery,
-    kDeviceStateShowcase,
     kDeviceStateFatalError
 };
 
-#define OPUS_FRAME_DURATION_MS 60   //60
+#define OPUS_FRAME_DURATION_MS 60
 #define MAX_AUDIO_PACKETS_IN_QUEUE (2400 / OPUS_FRAME_DURATION_MS)
 
 class Application {
@@ -60,13 +58,12 @@ public:
         static Application instance;
         return instance;
     }
-    // 删除拷贝构造函数和赋值运算符
     Application(const Application&) = delete;
     Application& operator=(const Application&) = delete;
+
     void ResetDecoder();
     void Start();
     DeviceState GetDeviceState() const { return device_state_; }
-    bool IsVoiceDetected() const { return voice_detected_; }
     void Schedule(std::function<void()> callback);
     void SetDeviceState(DeviceState state);
     void Alert(const char* status, const char* message, const char* emotion = "", const std::string_view& sound = "");
@@ -75,63 +72,32 @@ public:
     void ToggleChatState();
     void StartListening();
     void StopListening();
-    void UpdateIotStates();
     void Reboot();
-    void WakeWordInvoke(const std::string& wake_word);
-    void EmergencyWake();
-    void CharacterSwitch(uint8_t* uid,size_t size);
-    void NotifyResetResult(bool result);
-    void PlaySound(const std::string_view& sound);
-    void StartShowcase();
-    void ExitShowcase();
-    bool IsInShowcaseMode() const { return device_state_ == kDeviceStateShowcase; }
-    /** 在主循环中：关会话、播低电提示音并进入 kDeviceStateLowBattery（勿在定时器回调里直接调 Application 其它接口）。 */
-    void RequestLowBatteryHalt();
-    void ClearLowBatteryHalt();
-    bool CanEnterSleepMode();
     void SendMcpMessage(const std::string& payload);
-    void SetAecMode(AecMode mode);
-    AecMode GetAecMode() const { return aec_mode_; }
     BackgroundTask* GetBackgroundTask() const { return background_task_; }
-    void SetBackgroundAudioStreamActive(bool active);
-    
-    std::unique_ptr<WakeWord> wake_word_;
-    std::unique_ptr<MicroWakeWordDetect> micro_wake_word_;
     std::unique_ptr<AudioDebugger> audio_debugger_;
-    bool background_audio_stream_ = false;
-    
+
 private:
     Application();
     ~Application();
+
     std::unique_ptr<Protocol> protocol_;
-    
-    
     std::unique_ptr<AudioProcessor> audio_processor_;
-  
     Ota ota_;
     std::mutex mutex_;
     std::list<std::function<void()>> main_tasks_;
-    bool remind_mark_ = false ;
     EventGroupHandle_t event_group_ = nullptr;
     esp_timer_handle_t clock_timer_handle_ = nullptr;
-    esp_timer_handle_t microwakeword_timer_handle_ = nullptr;
     volatile DeviceState device_state_ = kDeviceStateUnknown;
-    ListeningMode listening_mode_ = kListeningModeAutoStop;
+    ListeningMode listening_mode_ = kListeningModeRealtime;
     AecMode aec_mode_ = kAecOff;
 
+    bool always_conversation_mode_ = false;
+    bool entering_conversation_ = false;
     bool aborted_ = false;
-    bool voice_detected_ = false;
     bool busy_decoding_audio_ = false;
-    /** 后台纯播放（StartAudioStream），关闭拾音且禁止打断 */
-    
-    std::string_view showcase_sound_;
-    size_t showcase_sound_offset_ = 0;
-    static constexpr size_t kShowcaseQueueLowWater = 8;
-    static constexpr size_t kShowcaseFramesPerFeed = 12;
     int clock_ticks_ = 0;
-    TaskHandle_t check_new_version_task_handle_ = nullptr;
 
-    // Audio encode / decode
     TaskHandle_t audio_loop_task_handle_ = nullptr;
     BackgroundTask* background_task_ = nullptr;
     std::chrono::steady_clock::time_point last_output_time_;
@@ -139,7 +105,6 @@ private:
     std::list<AudioStreamPacket> audio_decode_queue_;
     std::condition_variable audio_decode_cv_;
 
-    // 新增：用于维护音频包的timestamp队列
     std::list<uint32_t> timestamp_queue_;
     std::mutex timestamp_mutex_;
 
@@ -147,29 +112,20 @@ private:
     std::unique_ptr<OpusDecoderWrapper> opus_decoder_;
 
     OpusResampler input_resampler_;
-    OpusResampler reference_resampler_;
     OpusResampler output_resampler_;
 
     void MainEventLoop();
     void OnAudioInput();
     void OnAudioOutput();
     bool ReadAudio(std::vector<int16_t>& data, int sample_rate, int samples);
-
     void SetDecodeSampleRate(int sample_rate, int frame_duration);
     void CheckNewVersion();
     void ShowActivationCode();
     void OnClockTimer();
     void SetListeningMode(ListeningMode mode);
+    void EnterConversationMode();
+    void ScheduleEnterConversationMode();
     void AudioLoop();
-    void EnqueueP3Frames(const std::string_view& sound, size_t& offset, size_t max_frames);
-    void FeedShowcaseAudioIfNeeded();
-    void ApplyBackgroundAudioStreamMute();
-    void RestoreAudioInputAfterBackgroundStream();
-    
-
-    // 音频能量计算相关函数
-    float CalculateAudioRMS(const std::vector<int16_t>& audio_data);
-    void UpdateLedWithAudioLevel(float rms_value);
 };
 
 #endif // _APPLICATION_H_

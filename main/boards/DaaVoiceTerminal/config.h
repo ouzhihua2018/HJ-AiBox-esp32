@@ -1,0 +1,36 @@
+#ifndef _BOARD_CONFIG_H_
+#define _BOARD_CONFIG_H_
+
+#include <driver/gpio.h>
+
+#define AUDIO_INPUT_SAMPLE_RATE  8000
+#define AUDIO_OUTPUT_SAMPLE_RATE 8000
+
+// ESP32 EN 硬件接高，软件不驱动。
+
+// PCM highway：ESP32 主机出时钟。命名按 Si3050 手册。
+//   PCLK  = 位时钟      ← ESP32 I2S BCLK
+//   PSYNC = 帧同步 FSYNC ← ESP32 I2S WS（手册也叫 FSYNC）
+//   DRX   = Si3050 收语音 ← ESP32 I2S DOUT
+//   DTX   = Si3050 发语音 → ESP32 I2S DIN
+#define PCM_PCLK_GPIO   GPIO_NUM_38
+#define PCM_FSYNC_GPIO  GPIO_NUM_39
+#define PCM_DRX_GPIO    GPIO_NUM_14  // ESP DOUT → Si3050 DRX
+#define PCM_DTX_GPIO    GPIO_NUM_21  // Si3050 DTX → ESP DIN
+
+// SPI：命名按 Si3050。
+//   SDI = 芯片收 ← ESP32 MOSI
+//   SDO = 芯片发 → ESP32 MISO
+#define DAA_SPI_SCLK_GPIO GPIO_NUM_11
+#define DAA_SPI_MOSI_GPIO GPIO_NUM_41  // ESP MOSI → Si3050 SDI
+#define DAA_SPI_MISO_GPIO GPIO_NUM_42  // Si3050 SDO → ESP MISO
+#define DAA_SPI_CS_GPIO   GPIO_NUM_40
+
+#define DAA_RESET_GPIO    GPIO_NUM_10
+#define DAA_RGDT_GPIO     GPIO_NUM_12
+#define DAA_INT_GPIO      GPIO_NUM_13
+
+#define BATTERY_ADC_GPIO  GPIO_NUM_4
+#define BOOT_BUTTON_GPIO  GPIO_NUM_0
+
+#endif // _BOARD_CONFIG_H_

@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Si3050 / Si3019 分步测试说明</title>
+<style>
+  :root { --fg:#1a1a1a; --muted:#555; --line:#ccc; --bg:#fff; --code:#f4f4f4; --ok:#0d5c0d; --bad:#8b1d1d; }
+  body { font: 16px/1.55 system-ui, "Noto Sans SC", sans-serif; color:var(--fg); background:var(--bg); max-width:880px; margin:32px auto 80px; padding:0 20px; }
+  h1 { font-size:1.6rem; margin:0 0 8px; }
+  h2 { font-size:1.25rem; margin:2.2em 0 0.6em; border-bottom:1px solid var(--line); padding-bottom:6px; }
+  h3 { font-size:1.05rem; margin:1.4em 0 0.4em; }
+  p, li { color:var(--fg); }
+  .muted { color:var(--muted); }
+  table { border-collapse:collapse; width:100%; margin:12px 0 20px; font-size:0.95rem; }
+  th, td { border:1px solid var(--line); padding:7px 9px; text-align:left; vertical-align:top; }
+  th { background:#f3f3f3; }
+  code, pre { font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size:0.88em; }
+  pre { background:var(--code); padding:12px 14px; overflow:auto; border:1px solid var(--line); }
+  .why { background:#f7f7f7; border-left:3px solid #444; padding:10px 14px; margin:12px 0; }
+  .ok { color:var(--ok); }
+  .bad { color:var(--bad); }
+  .note { font-size:0.92rem; color:var(--muted); }
+</style>
+</head>
+<body>
+
+<h1>Si3050 + Si3019 分步测试说明</h1>
+<p class="muted">给不会模拟电路、按手册应用图抄板的人用。每一关只证明一层。前一关不过，不要插电话线，更不要摘机。</p>
+<p class="muted">固件：<code>idf.py menuconfig</code> → Daa Voice Terminal → <code>DAA_BRINGUP_GATE</code>。默认 <strong>1</strong>。测回环改成 <strong>2</strong>。串口 115200。设为 <strong>7</strong> 才走原来的连云路径。</p>
+
+<h2>1. 这块板在干什么</h2>
+<p>电话线上的声音是模拟的。Si3019 在电话线那一侧（IGND），Si3050 在 ESP32 这一侧（DGND）。中间靠隔离电容传数字，不是变压器。</p>
+<pre>
+电话线 TIP/RING
+    │
+  Si3019（线路侧，IGND）
+    │  隔离电容 C1/C2/C8/C9
+  Si3050（系统侧，3.3V / DGND）
+    │
+    ├─ SPI：只配寄存器，不传语音
+    └─ PCM：PCLK / PSYNC / DRX / DTX 传样点
+         │
+       ESP32-S3
+</pre>
+<p>上电复位后，手册规定：<strong>隔离链路默认关着（PDL=1）</strong>，线路侧等于没接上。这时可以 SPI 读写 Si3050，也可以做芯片内部的数字回环，但读不到铃、线路电压，也不能真正摘机。这是安全默认，也是我们先测数字口的原因。</p>
+
+<h2>2. 脚位（已按你的接线写入 firmware）</h2>
+<p>ESP32 <strong>EN 硬件接高</strong>，软件不管。GPIO39–42 和 JTAG 复用，测试时不要再插外部 JTAG；固件会先 <code>gpio_reset_pin</code> 再当普通脚用。</p>
+<table>
+  <tr><th>信号</th><th>Si3050</th><th>ESP32-S3</th><th>方向</th></tr>
+  <tr><td>PCLK</td><td>PCLK</td><td>IO38</td><td>ESP → 芯片（位时钟）</td></tr>
+  <tr><td>PSYNC / FSYNC</td><td>FSYNC</td><td>IO39</td><td>ESP → 芯片（8 kHz 帧同步）</td></tr>
+  <tr><td>DRX</td><td>DRX</td><td>IO14</td><td>ESP I2S DOUT → 芯片（我们对它说话）</td></tr>
+  <tr><td>DTX</td><td>DTX</td><td>IO21</td><td>芯片 → ESP I2S DIN（我们听线路/回环）</td></tr>
+  <tr><td>SCLK</td><td>SCLK</td><td>IO11</td><td>SPI 时钟。复位拉高瞬间必须为高</td></tr>
+  <tr><td>SDI</td><td>SDI</td><td>IO41</td><td>ESP MOSI → 芯片</td></tr>
+  <tr><td>SDO</td><td>SDO</td><td>IO42</td><td>芯片 → ESP MISO</td></tr>
+  <tr><td>CS</td><td>CS</td><td>IO40</td><td>低有效</td></tr>
+  <tr><td>/RESET</td><td>RESET</td><td>IO10</td><td>ESP 推挽。低=复位</td></tr>
+  <tr><td>/RGDT</td><td>RGDT</td><td>IO12</td><td>开漏振铃，板上应有上拉</td></tr>
+  <tr><td>/INT</td><td>AOUT/INT</td><td>IO13</td><td>可选中断，Gate 5 再用</td></tr>
+  <tr><td>VBAT 分压</td><td>—</td><td>IO4</td><td>ADC1_CH3，只看电量</td></tr>
+</table>
+<p class="note">手册里的 FSYNC 就是你原理图上的 PSYNC，同一根线。</p>
+
+<h2>3. 硬性顺序（为什么必须这样）</h2>
+<div class="why">
+  <p><strong>RESET 拉高之前，PCLK 至少已经跑了 10 个周期。</strong> Si3050 用 PCLK/FSYNC 锁内部 PLL。没有时钟就释放复位，后面 PCM 帧对不齐，SPI 即使读通了，语音也会是垃圾。</p>
+  <p><strong>RESET 拉高的那一瞬，SCLK 必须为高。</strong> 芯片用这只脚在复位边沿二选一：高 = PCM 语音 + SPI 寄存器；低 = GCI（语音和控制挤在同一组线上）。我们走 PCM+SPI。一旦进了 GCI，SDI/SDO 的含义全变，后面每一关都是假失败。</p>
+  <p><strong>FDT 没置 1，软件禁止写 OH=1。</strong> 隔离墙没通，线路侧状态无效，摘机没有意义，还有误占线风险。</p>
+  <p><strong>Gate 0–3 不插 RJ11。</strong> 先证明 3.3V、SPI、PCM 四根线、隔离电容，再让 48V / 铃流进来。</p>
+</div>
+<pre>
+正确上电：
+  3.3V 稳定
+  → ESP32 先出 PCLK + PSYNC（IO38 / IO39）
+  → 把 SCLK（IO11）用 GPIO 拉高（此时还不要开 SPI 主机，SPI Mode0 空闲是低）
+  → /RESET 低 ≥ 1 ms（256 kHz 时 10 个 PCLK 约 40 µs，拉 1–2 ms 更稳）
+  → /RESET 拉高（锁死 PCM+SPI）
+  → 再把 IO11 交给 SPI 驱动（空闲变低没关系，模式已经锁住）
+</pre>
+
+<h2>4. PCM 时序对齐：Si3050 怎么配（手册 5.32 / 5.33 / Register 33–37）</h2>
+
+<div class="why">
+  <p>手册写死三件事：<strong>FSYNC 必须 8 kHz</strong>；PCLK 只能是 256 kHz～8.192 MHz 那几档；芯片在 <strong>FSYNC 上升沿</strong> 之后数 PCLK，数到 TXS/RXS 才开始传 MSB。</p>
+  <p>ESP32 当主机出 PCLK 和 FSYNC。Si3050 当从机。PLL 会自己算出 PCLK/FSYNC 的比值，软件不用写分频。</p>
+</div>
+
+<h3>4.1 我们选的格式</h3>
+<table>
+  <tr><th>手册项</th><th>取值</th><th>寄存器</th><th>为什么</th></tr>
+  <tr><td>通信模式</td><td>PCM + SPI，不是 GCI</td><td>RESET↑ 时 SCLK=1（5.31）</td><td>GCI 会占用 SPI 脚</td></tr>
+  <tr><td>打开 PCM</td><td>PCME=1</td><td>Reg33 bit5</td><td>不置位则不往 highway 送数</td></tr>
+  <tr><td>样点格式 PCMF</td><td><code>11</code> = 16-bit linear（2’s complement）</td><td>Reg33 bit4:3</td><td>手册 5.33：线性模式占<strong>连续两个 8-bit timeslot</strong>。不用 µ-law，省得和 ESP32 int16 再转一层</td></tr>
+  <tr><td>PHCF</td><td>0 = 1 个 PCLK 传 1 bit</td><td>Reg33 bit1</td><td>不要 double-clock（Figure 33）</td></tr>
+  <tr><td>TRI</td><td>1 = LSB 在 PCLK 下降沿变高阻</td><td>Reg33 bit0</td><td>手册默认推荐，避免和相邻槽抢总线</td></tr>
+  <tr><td>PCML</td><td>0</td><td>Reg33 bit7</td><td>模拟回环留给以后测线路，现在关掉</td></tr>
+  <tr><td>HSSM</td><td>0 = 8 kHz 采样</td><td>Reg7 bit3</td><td>16 kHz 会多占 timeslot（5.34），首测不用</td></tr>
+  <tr><td>GCI 寄存器</td><td>Reg42 保持 0x00</td><td>—</td><td>手册 5.31：PCM 模式下禁止写 GCI 控制</td></tr>
+</table>
+<p>Reg33 合起来写 <code>0x39</code>：<code>PCME=1, PCMF=11, PHCF=0, TRI=1</code>。</p>
+
+<h3>4.2 TXS / RXS：对齐的核心</h3>
+<p>Reg34–35 = TXS[9:0]，Reg36–37 = RXS[9:0]。含义（原文）：<strong>FSYNC 上升沿之后再过多少个 PCLK，才开始传/收 MSB</strong>。写 0 表示 MSB 就在 FSYNC 上升沿那一个周期（Figure 30）。</p>
+<table>
+  <tr><th>TXS=RXS</th><th>手册图</th><th>和 ESP32 的对应</th></tr>
+  <tr><td>0</td><td>Figure 30 短 FSYNC，数据从 PCLK_CNT=0 开始</td><td>I2S <code>bit_shift=false</code>（MSB 对齐 WS 边沿）</td></tr>
+  <tr><td>1</td><td>Table 8 / Figure 4（RXS=TXS=1）</td><td>I2S Philips：<code>bit_shift=true</code>，WS 边沿后再空 1 拍才出 MSB。我们用这一档</td></tr>
+</table>
+<p>固件先写 Reg34=0x01、Reg35=0x00、Reg36=0x01、Reg37=0x00，<strong>然后再</strong>写 Reg33 打开 PCME（手册：34–37 要在 PCM 使能之前设好）。</p>
+<pre>
+FSYNC 上升沿（手册只认上升沿，长短脉冲都行）
+PCLK 周期编号:   0        1         2 .............. 16        17 .... 帧结束
+TXS=RXS=1:      空 1 拍   b15 开始 → 共 16 bit 线性样点      其余 timeslot 高阻
+
+16-bit linear 占用两个 8-bit timeslot（Figure 34）：
+  第 1 个槽: b15..b8
+  第 2 个槽: b7..b0
+后面的槽 Si3050 不驱动 DTX。
+</pre>
+<p>Table 8 边沿约定（用来核对示波器，不是用来改寄存器的）：</p>
+<ul>
+  <li>DTX 在 <strong>PCLK 上升沿</strong> 更新</li>
+  <li>DRX 在 <strong>PCLK 下降沿</strong> 之前建立、之后保持（tsu2 / th2）</li>
+  <li>FSYNC 上升要在某次 PCLK 下降之前 ≥25 ns 就绪</li>
+</ul>
+
+<h3>4.3 一帧 32 bit，不是 64 bit</h3>
+<p>合法 PCLK（Table 8）：256 / 512 / 768 kHz、1.024 / 1.536 / 2.048 / 4.096 / 8.192 MHz。<strong>FSYNC 永远 8 kHz</strong>。一帧里的 PCLK 个数 = PCLK ÷ 8 kHz。</p>
+<p>空槽本身没问题：PCM highway 就是「一帧里很多 8-bit timeslot，本芯片只用其中两个」。手册写 DTX 只在自己的 16 bit 里驱动，其余时间高阻。所以 <em>有</em> 空槽是设计如此。</p>
+<p>不合适的是把 ESP32 配成 32-bit × 2 槽 = 64 bit/帧（512 kHz）。Si3050 仍然只吃前 16 bit，等于白留 48 bit。ESP-IDF 标准 Philips <strong>永远是 2 个 slot</strong>，最低合法配法是：</p>
+<table>
+  <tr><th>ESP32 I2S</th><th>PCLK</th><th>一帧</th><th>Si3050 用掉</th><th>空槽</th></tr>
+  <tr><td>32-bit × 2（旧）</td><td>512 kHz</td><td>64 bit</td><td>16 bit</td><td>48 bit，过宽</td></tr>
+  <tr><td><strong>16-bit × 2（现在）</strong></td><td><strong>256 kHz</strong></td><td><strong>32 bit</strong></td><td><strong>16 bit</strong></td><td><strong>16 bit，下限</strong></td></tr>
+  <tr><td>16-bit × 1</td><td>128 kHz</td><td>16 bit</td><td>16 bit</td><td>0，但 Table 8 <strong>没有 128 kHz</strong></td></tr>
+</table>
+<p>所以空 16 bit 去不掉：再瘦就会低于 Si3050 允许的最低 PCLK。TXS=1 仍然是「上升沿后再过 1 拍」，不必随帧长改。</p>
+
+<h3>4.4 和 ESP32 I2S 的接线（已经写在工程里）</h3>
+<pre>
+ESP32 I2S0 主机                 Si3050 从机
+BCLK  IO38  ────────────────►  PCLK
+WS    IO39  ────────────────►  FSYNC / PSYNC
+DOUT  IO14  ────────────────►  DRX     （我们对芯片说话）
+DIN   IO21  ◄────────────────  DTX     （芯片对我们说话）
+bit_shift = true  ←→  TXS = RXS = 1
+ws_pol    = true  ←→  FSYNC 上升沿对准左槽（手册只认上升沿）
+data_bit_width = 16，DMA 直接走 int16
+右槽 16 bit 是时钟填充，Si3050 不采样
+</pre>
+<p>不要把 WS 留在 I2S 默认极性（左槽为低）。那样上升沿会落到右槽，Si3050 会采空槽，回环能量接近 0。</p>
+<p>不要用 µ-law（PCMF=01）。那是北美压扩，样点不是 int16。</p>
+
+<h3>4.5 初始化顺序里 PCM 插在哪（手册 5.3）</h3>
+<pre>
+1. 上电，RESET 拉低再拉高（PCLK 已在跑，SCLK 在上升沿为高）
+2. 等 PLL：Tsettle ≈ 64/PCLK，256 kHz 时约 0.25 ms，我们等 2 ms
+3. <strong>先写 Reg34–37（TXS/RXS），再写 Reg33 打开 PCM</strong>
+4. 国家参数（中国：Table 13 ACIM=1010 等）—— Gate 3 清 PDL 之前再写
+5. FULL/IIRE 保持 0
+6. 最后才写 Reg6=0x00 打开线路侧（Gate 3）
+</pre>
+<p>Gate 1 读通寄存器后，固件会立刻执行第 3 步。Gate 2 的 PDL=1 回环必须在 PCM 已使能时才能在 DTX 上看到自己发出的波形。</p>
+
+<h2>5. 关卡</h2>
+
+<h3>Gate 0 — 上电，不插电话线</h3>
+<div class="why">
+  <strong>为什么：</strong>先确认盒子自己的 3.3V 和隔离条，排除电源和短路。此时故意把 /RESET 拉低，芯片保持手册复位态：不会自己摘机占线。
+</div>
+<p><span class="ok">通过：</span>串口有日志；万用表 Si3050 VDD=3.3V；DGND 与 IGND 不导通；IO4 能读到 ADC raw（分压比以后再标定）。</p>
+<p><span class="bad">失败：</span>没 3.3V → 查 Type-C / 电源芯片。两边地导通 → 查隔离电容连锡、隔离槽被铜皮连上。</p>
+
+<h3>Gate 1 — 复位进 PCM+SPI，读寄存器</h3>
+<div class="why">
+  <strong>为什么：</strong>这是整板数字侧的第一道铁证。还没打开隔离墙，也还没插电话。读到稳定、非全 0/全 1 的寄存器，才能证明：时钟进了芯片、复位边沿选对了 PCM+SPI、四根 SPI 没接反。
+</div>
+<p>SPI 按手册 5.35：每笔是 Control + Address + Data（16-bit 主机一次拉 32 个 SCLK）。单芯片 CID=0：写 Control=<code>0x20</code>，读 Control=<code>0x60</code>。不是 <code>0x80|addr</code> 那种两字节协议。</p>
+<p>串口应反复打印 <code>REG6</code> <code>REG11</code> <code>REG12</code>。复位后 <code>REG6</code> 的 PDL 位（bit4）应为 1，常见 <code>0x10</code>。</p>
+<p><span class="ok">通过：</span>连续 5 次读一致，且不是全 00 / 全 FF。日志出现 <code>GATE1 PASS</code>，随后 <code>PCM cfg REG33=0x39 TXS=1 RXS=1</code>。</p>
+<p><span class="bad">失败分层：</span></p>
+<ul>
+  <li>全 FF 或全 00：SPI 没挂上，或进了 GCI。示波器看 RESET↑ 时 IO11 是否为高；SDI/SDO 是否对调。</li>
+  <li>每次乱跳：CS 时序或速率。固件已用 200 kHz，仍乱再查飞线/虚焊。</li>
+  <li>REG6.PDL 不是 1：读写相位（Mode0）可能不对，先别往下关。</li>
+</ul>
+
+<h3>Gate 2 — PDL=1 数字回环（仍不插电话线）</h3>
+<div class="why">
+  <strong>为什么：</strong>手册默认 PDL=1 时，线路侧掉电，<em>系统侧</em>把 DRX 收到的数字样点经片内收发滤波器送到 DTX。约 0.9 dB 衰减，有群时延。不需要 Si3019 工作，不要摘机，不要清 PDL。这一关只证明 PCM 四根线（IO38/39/14/21）和帧对齐，与电话线无关。
+</div>
+<p>链路（墙是关的）：</p>
+<pre>
+ESP32 I2S TX
+    IO14 DOUT ──► Si3050 DRX
+                      │
+                      │  PDL=1：内部数字回环
+                      │  （发送滤波 + 接收滤波，不经过 Si3019）
+                      ▼
+    IO21 DIN  ◄── Si3050 DTX
+ESP32 I2S RX
+</pre>
+<p>TIP/RING、Si3019、隔离链路上<strong>没有声音</strong>。你在串口里看到的，是自己发出去的波形晚一点、稍小一点回来。</p>
+<p>串口应看到 <code>LOOPBACK TX RMS=… RX RMS=…</code>，以及 <code>GATE2 PASS</code> 或 <code>FAIL</code>。</p>
+<p><span class="ok">通过：</span>RX RMS 大约是 TX 的 0.8～1.0 倍（手册约 0.9 dB 衰减）；1 kHz 的 Goertzel 远大于 2 kHz。头几个样点应能看出正弦，不是全 0。</p>
+<p><span class="bad">失败：</span></p>
+<ul>
+  <li>RMS 接近 0：IO14/21 交叉、PCLK/PSYNC 没出、或 REG33 PCME 没开（DTX 高阻）。</li>
+  <li>有能量但 1 kHz 不明显：16-bit 窗口或 <code>bit_shift</code>/TXS 错 1 bit，样点被撕碎。</li>
+  <li>PDL 不是 1：不要在这一关写 REG6=0，那是 Gate 3。</li>
+</ul>
+<p class="note">清掉 PDL 以后，DTX 改走线路侧 ADC，这条内部回环会消失。所以 Gate 2 必须在 PDL=1 时做，不要和 Gate 3 搅在一起。</p>
+
+<h3>Gate 3 — 清 PDL，等到 FDT=1，确认 Si3019</h3>
+<div class="why">
+  <strong>为什么：</strong>PDL=Powerdown Line-side。写成 0 才打开隔离墙上的通信。FDT（Register 12 bit6）表示系统侧和线路侧已经握手成功。LSID=0011 表示对面是 Si3019。墙没通，后面铃、电压、摘机全是假的。
+</div>
+<pre>
+写 REG6 = 0x00（PDL=0, PDN=0）
+    → 等 FDT=1（一般数毫秒到几十毫秒）
+    → 读线路侧识别 LSID
+</pre>
+<p><span class="ok">通过：</span>FDT=1，LSID=0011。</p>
+<p><span class="bad">失败：</span>FDT 一直 0 → C1/C2/C8/C9、Si3019 供电/焊接、IGND。不要用「插上电话听有没有声」代替这一关。</p>
+
+<h3>Gate 4 — 第一次插电话线，仍挂机，读 LVS</h3>
+<div class="why">
+  <strong>为什么：</strong>OH 保持 0。LVS（Reg29，约 1 V/bit）看 TIP–RING 直流。空闲局端常见约几十伏。用来证明并机接到了真线，且没有把线直流短路。
+</div>
+<p><span class="ok">通过：</span>LVS 是几十伏量级；原座机仍能打出/打进。</p>
+<p><span class="bad">失败：</span>LVS≈0 → 没接到局端、极性/断线，或 FDT 实际没通。</p>
+
+<h3>Gate 5 — 振铃</h3>
+<div class="why">
+  <strong>为什么：</strong>铃流是线上的高压交流，并机的座机和 Si3019 同时看到，盒子不用「转发」铃声。FDT 未置位时手册写明 RGDT 不工作。人有没有接听，看 LVS 下跌，<strong>不要把铃与铃之间的静音当成「人接了」</strong>。
+</div>
+<p>看 IO12（RGDT）和寄存器 RDT。原座机应同时响。</p>
+
+<h3>Gate 6 — 摘机 + PCM 对讲</h3>
+<div class="why">
+  <strong>为什么：</strong>只有 FDT=1、且 LVS 仍高（人没先摘座机）时，才写 OH=1。LCS 表示盒子自己拉通了回路。然后才用 Gate 2 已对齐的 PCM 跟对端说话。
+</div>
+<p>失败分层：OH=1 但 LCS=0 → 线路侧终止/整流，不是 SPI。有电流无声 → 槽位/PCMF。只有单向 → DRX/DTX 接反。</p>
+
+<h3>Gate 7 — 才接 Wi-Fi / 大模型</h3>
+<p>前六关全过，再把 <code>DAA_BRINGUP_GATE</code> 设为 7。这关失败先查网络，不要回头怀疑模拟——除非 Gate 6 已经不稳。</p>
+
+<h2>6. 过关日志（串口里找这些字）</h2>
+<table>
+  <tr><th>关</th><th>日志</th></tr>
+  <tr><td>0</td><td><code>GATE 0</code>，<code>VBAT ADC IO4 raw=</code></td></tr>
+  <tr><td>1</td><td><code>GATE1 PASS</code> 或 <code>FAIL</code>，带 REG6/11/12，随后 <code>PCM cfg REG33=0x39</code></td></tr>
+  <tr><td>2</td><td><code>LOOPBACK</code> 的 TX/RX RMS，然后 <code>GATE2 PASS</code> 或 <code>FAIL</code></td></tr>
+  <tr><td>3</td><td><code>FDT=1  LSID=0011</code></td></tr>
+  <tr><td>4</td><td><code>LVS=</code></td></tr>
+  <tr><td>5</td><td><code>RING</code></td></tr>
+  <tr><td>6</td><td><code>OH=1  LCS=</code></td></tr>
+</table>
+
+<h2>7. 定位口诀</h2>
+<ul>
+  <li>Gate 1 不过：焊盘 / SPI / 复位时 SCLK 不是高。</li>
+  <li>Gate 2 不过：PCM 四根线或 16-bit 窗口没对齐。</li>
+  <li>Gate 3 不过：隔离电容和 Si3019。</li>
+  <li>Gate 4 以后：才是电话线和模拟。</li>
+</ul>
+<p class="muted">不要用「插上线听有没有声」当第一测项。</p>
+
+</body>
+</html>

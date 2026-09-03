@@ -8,22 +8,17 @@
 #include <string>
 
 #include "led/led.h"
-#include "backlight.h"
-#include "camera.h"
-#include "motor.h"
+
 void* create_board();
 class AudioCodec;
-class Display;
 class Board {
 private:
-    Board(const Board&) = delete; // 禁用拷贝构造函数
-    Board& operator=(const Board&) = delete; // 禁用赋值操作
+    Board(const Board&) = delete;
+    Board& operator=(const Board&) = delete;
 
 protected:
     Board();
     std::string GenerateUuid();
-
-    // 软件生成的设备唯一标识
     std::string uuid_;
 
 public:
@@ -31,23 +26,12 @@ public:
         static Board* instance = static_cast<Board*>(create_board());
         return *instance;
     }
-    virtual void StartRfidScan() {};
-    virtual void StopRfidScan() {};
-    virtual void StopMotorWork() {};
-    virtual void StopLedWork() {};
-    virtual void OnEnterShowcaseMode() {}
-    virtual void OnExitShowcaseMode() {}
     virtual ~Board() = default;
     virtual std::string GetBoardType() = 0;
     virtual std::string GetUuid() { return uuid_; }
-    virtual Backlight* GetBacklight() { return nullptr; }
     virtual Led* GetLed();
-    virtual Led* GetLed2();
     virtual AudioCodec* GetAudioCodec() = 0;
     virtual bool GetTemperature(float& esp32temp);
-    virtual Display* GetDisplay();
-
-    virtual Camera* GetCamera();
     virtual Http* CreateHttp() = 0;
     virtual WebSocket* CreateWebSocket() = 0;
     virtual Mqtt* CreateMqtt() = 0;
@@ -55,8 +39,6 @@ public:
     virtual void StartNetwork() = 0;
     virtual const char* GetNetworkStateIcon() = 0;
     virtual bool GetBatteryLevel(int &level, bool& charging, bool& discharging);
-    virtual bool GetMotorSpeed(int &current_speed);
-    virtual bool GetLedState(std::string& effect, int& speed_ms, int& intensity, int& white, int& yellow, int& blue);
     virtual std::string GetJson();
     virtual void SetPowerSaveMode(bool enabled) = 0;
     virtual std::string GetBoardJson() = 0;

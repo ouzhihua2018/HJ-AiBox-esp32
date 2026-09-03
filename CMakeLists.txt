@@ -10,4 +10,4 @@ set(PROJECT_VER "1.0.0")
 add_compile_options(-Wno-missing-field-initializers)
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
-project(TDi-300-PH)
+project(DaaVoiceTerminal)
